@@ -39,21 +39,15 @@ export interface Message {
 }
 
 export interface Lead {
-  id: string
-  conversation_id: string
+  id?: string
+  conversation_id?: string
   phone_number: string
-  name: string | null
-  stage: Stage
-  checkin_date: string | null
-  checkout_date: string | null
-  room_type: string | null
-  num_guests: number | null
-  budget: string | null
-  notes: string | null
-  created_at: string
-  updated_at: string
+  name?: string
+  customer_name?: string
+  lead_type?: string
+  intent?: string
+  summary?: string
 }
-
 // n8n / Webhook payload
 export interface WebhookPayload {
   phone_number: string
