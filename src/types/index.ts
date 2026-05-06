@@ -43,10 +43,12 @@ export interface Lead {
   conversation_id?: string
   phone_number: string
   name?: string
-  customer_name?: string
   lead_type?: string
-  intent?: string
-  summary?: string
+  city?: string
+  machine_interest?: string
+  lead_quality?: string
+  callback_ready?: string
+  conversation_summary?: string
 }
 // n8n / Webhook payload
 export interface WebhookPayload {
