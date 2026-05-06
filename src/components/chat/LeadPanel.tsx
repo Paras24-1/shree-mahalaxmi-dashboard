@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Conversation, Lead } from '@/types'
 import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare } from 'lucide-react'
 
@@ -65,13 +65,13 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
       <div className="flex-1 overflow-y-auto p-5 space-y-3">
         {data.Phone ? (
           <>
-            <InfoCard icon={<Phone />} label="Phone Number" value={data.Phone} />
-            <InfoCard icon={<User />} label="Name" value={data.Name} />
-            <InfoCard icon={<Target />} label="Lead Type" value={data.Lead_Type} badge />
-            <InfoCard icon={<MapPin />} label="City" value={data.city} />
-            <InfoCard icon={<Wrench />} label="Machine Interest" value={data.machine_interest} />
-            <InfoCard icon={<Star />} label="Lead Quality" value={data.lead_quality} badge colored />
-            <InfoCard icon={<CheckCircle />} label="Callback Ready" value={data.callback_ready} badge />
+            <InfoCard icon={Phone} label="Phone Number" value={data.Phone} />
+            <InfoCard icon={User} label="Name" value={data.Name} />
+            <InfoCard icon={Target} label="Lead Type" value={data.Lead_Type} badge />
+            <InfoCard icon={MapPin} label="City" value={data.city} />
+            <InfoCard icon={Wrench} label="Machine Interest" value={data.machine_interest} />
+            <InfoCard icon={Star} label="Lead Quality" value={data.lead_quality} badge colored />
+            <InfoCard icon={CheckCircle} label="Callback Ready" value={data.callback_ready} badge />
 
             {data.conversation_summary && (
               <div className="mt-5 p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
@@ -101,8 +101,8 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   )
 }
 
-function InfoCard({ icon, label, value, badge, colored }: {
-  icon: React.ReactNode
+function InfoCard({ icon: Icon, label, value, badge, colored }: {
+  icon: React.ComponentType<{ className?: string }>
   label: string
   value?: string
   badge?: boolean
@@ -114,7 +114,7 @@ function InfoCard({ icon, label, value, badge, colored }: {
     <div className="p-3.5 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-emerald-200 dark:hover:border-emerald-900 transition-colors">
       <div className="flex items-center gap-2 mb-2">
         <div className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-400">
-          {React.cloneElement(icon as React.ReactElement, { className: 'w-3 h-3' })}
+          <Icon className="w-3 h-3" />
         </div>
         <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">{label}</p>
       </div>
