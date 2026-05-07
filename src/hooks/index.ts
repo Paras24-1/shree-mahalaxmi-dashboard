@@ -11,21 +11,28 @@ export function useConversations(filters: {
   search?: string
   stage?: string
   unread?: boolean
+  assignFilter?: 'all' | 'unassigned' | 'assigned'
+  userId?: string
+  isAdmin?: boolean
 } = {}) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchConversations = useCallback(async () => {
     const params = new URLSearchParams()
-    if (filters.search) params.set('search', filters.search)
-    if (filters.stage)  params.set('stage',  filters.stage)
-    if (filters.unread) params.set('unread', 'true')
+    if (filters.search)       params.set('search', filters.search)
+    if (filters.stage)        params.set('stage',  filters.stage)
+    if (filters.unread)       params.set('unread', 'true')
+    if (!filters.isAdmin && filters.userId)
+                              params.set('assigned_to', filters.userId)
+    if (filters.isAdmin && filters.assignFilter && filters.assignFilter !== 'all')
+                              params.set('assign_filter', filters.assignFilter)
 
     const res = await fetch(`/api/conversations?${params}`)
     const data = await res.json()
     if (Array.isArray(data)) setConversations(data)
     setLoading(false)
-  }, [filters.search, filters.stage, filters.unread])
+  }, [filters.search, filters.stage, filters.unread, filters.assignFilter, filters.userId, filters.isAdmin])
 
   useEffect(() => {
     fetchConversations()
