@@ -45,7 +45,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     search, 
     stage, 
     unread,
-    assignedFilter 
+    assignFilter 
   })
 
   useEffect(() => {
