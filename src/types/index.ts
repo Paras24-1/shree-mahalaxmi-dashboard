@@ -23,6 +23,14 @@ export interface Conversation {
   created_at: string
   updated_at: string
   lead?: Lead
+  assigned_to?: string | null
+assignment_status?: 'unassigned' | 'assigned' | 'completed' | 'closed'
+assigned_user?: {
+  id: string
+  name: string
+  email: string
+} | null
+
 }
 
 export interface Message {
