@@ -41,6 +41,8 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [employees, setEmployees] = useState<Employee[]>([])
   const { profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
+  console.log('DEBUG:', { profile, isAdmin, role: profile?.role })
+
 
 
   const { conversations, loading, refetch } = useConversations({ 
