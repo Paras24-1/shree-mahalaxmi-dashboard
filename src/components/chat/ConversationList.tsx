@@ -40,6 +40,8 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [deleting, setDeleting] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
   const { profile } = useAuth()
+  const isAdmin = profile?.role === 'admin'
+
 
   const { conversations, loading, refetch } = useConversations({ 
   search, 
@@ -86,7 +88,6 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     }
   }
 
-  const isAdmin = profile?.role === 'admin'
 
   return (
     <aside className="flex flex-col h-full bg-white dark:bg-gray-950">
