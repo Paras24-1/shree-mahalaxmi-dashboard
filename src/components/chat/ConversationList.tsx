@@ -1,5 +1,8 @@
 'use client'
 
+import { useAuth } from '@/contexts/AuthContext'
+import AssignDropdown from '@/components/admin/AssignDropdown'
+import { UserCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Conversation, Stage } from '@/types'
 import { useConversations } from '@/hooks'
@@ -30,7 +33,18 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [confirmId, setConfirmId]     = useState<string | null>(null)
   const [deleting, setDeleting]       = useState(false)
 
-  const { conversations, loading, refetch } = useConversations({ search, stage, unread })
+  const { profile } = useAuth()
+  const isAdmin = profile?.role === 'admin'
+  const [assignFilter, setAssignFilter] = useState<'all' | 'unassigned' | 'assigned'>('all')
+
+  const { conversations, loading, refetch } = useConversations({ 
+    search, 
+    stage, 
+    unread,
+    assignFilter,
+    userId: profile?.id,
+    isAdmin,
+  })
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -130,6 +144,25 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
             Unread
           </button>
         </div>
+
+        {/* Admin: assign filter tabs */}
+        {isAdmin && (
+          <div className="flex gap-1 mt-2">
+            {(['all', 'unassigned', 'assigned'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setAssignFilter(f)}
+                className={`flex-1 py-1 text-xs font-medium rounded-lg capitalize transition-colors ${
+                  assignFilter === f
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                    : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -148,6 +181,8 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
               isSelected={conv.id === selectedId}
               onClick={() => onSelect(conv)}
               onDelete={(e) => handleDelete(e, conv.id)}
+              isAdmin={isAdmin}
+              onAssigned={refetch}
             />
           ))
         )}
@@ -161,11 +196,15 @@ function ConversationItem({
   isSelected,
   onClick,
   onDelete,
+  isAdmin,
+  onAssigned,
 }: {
   conversation: Conversation
   isSelected: boolean
   onClick: () => void
   onDelete: (e: React.MouseEvent) => void
+  isAdmin: boolean
+  onAssigned: () => void
 }) {
   const [hovered, setHovered] = useState(false)
 
@@ -209,10 +248,29 @@ function ConversationItem({
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
           {conv.last_message || 'No messages yet'}
         </p>
+
         <div className="flex items-center gap-2 mt-1.5">
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS[conv.stage as Stage] || STAGE_COLORS.new}`}>
             {conv.stage}
           </span>
+        </div>
+
+        {/* Assignment */}
+        <div className="flex items-center gap-2 mt-1" onClick={e => e.stopPropagation()}>
+          {isAdmin ? (
+            <AssignDropdown
+              conversationId={conv.id}
+              currentAssignedTo={conv.assigned_to ?? null}
+              currentAssigneeName={(conv as any).assigned_user?.name}
+              onAssigned={onAssigned}
+            />
+          ) : (
+            conv.assigned_to && (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <UserCheck className="w-3 h-3" /> Assigned to you
+              </span>
+            )
+          )}
         </div>
       </div>
 
