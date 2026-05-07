@@ -1,20 +1,33 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import ProtectedRoute from '@/components/ProtectedRoute'
 import ConversationList from '@/components/chat/ConversationList'
 import ChatWindow from '@/components/chat/ChatWindow'
 import LeadPanel from '@/components/chat/LeadPanel'
+import AdminPanel from '@/components/admin/AdminPanel'
 import { Conversation, Lead } from '@/types'
-import { MessageSquare, Moon, Sun, ArrowLeft, Info, Send } from 'lucide-react'
+import { MessageSquare, Moon, Sun, ArrowLeft, Info, Send, Users, LogOut, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/contexts/AuthContext'
 
 type MobileView = 'list' | 'chat' | 'lead'
 
 export default function DashboardPage() {
-  const [selected, setSelected]     = useState<Conversation | null>(null)
-  const [lead, setLead]             = useState<Lead | null>(null)
-  const [dark, setDark]             = useState(false)
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
+  )
+}
+
+function DashboardContent() {
+  const [selected, setSelected] = useState<Conversation | null>(null)
+  const [lead, setLead] = useState<Lead | null>(null)
+  const [dark, setDark] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('list')
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const { profile, signOut } = useAuth()
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
@@ -45,12 +58,22 @@ export default function DashboardPage() {
     }
   }
 
+  const handleLogout = async () => {
+    await signOut()
+  }
+
+  const isAdmin = profile?.role === 'admin'
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-white dark:bg-gray-950">
+      {/* Admin Panel Modal */}
+      {showAdminPanel && (
+        <AdminPanel onClose={() => setShowAdminPanel(false)} />
+      )}
+
       {/* Top bar */}
       <header className="h-12 flex items-center justify-between px-4 bg-emerald-600 shrink-0 z-10">
         <div className="flex items-center gap-2">
-          {/* Back button on mobile */}
           {mobileView !== 'list' && (
             <button
               onClick={() => setMobileView(mobileView === 'lead' ? 'chat' : 'list')}
@@ -61,50 +84,70 @@ export default function DashboardPage() {
           )}
           <MessageSquare className="w-5 h-5 text-white" />
           <span className="text-white font-semibold text-sm">
-            {mobileView === 'list' && 'Service Dashboard'}
+            {mobileView === 'list' && 'Shree Mahalaxmi CRM'}
             {mobileView === 'chat' && (selected?.name || 'Chat')}
             {mobileView === 'lead' && 'Lead Info'}
           </span>
+          <span className="hidden md:inline-block ml-2 px-2 py-0.5 bg-emerald-700 text-emerald-100 text-xs rounded-full">
+            {isAdmin ? 'Admin' : 'Employee'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
-  {/* Lead info button on mobile when in chat */}
-  {mobileView === 'chat' && selected && (
-    <button
-      onClick={() => setMobileView('lead')}
-      className="p-1.5 rounded-lg text-emerald-100 hover:bg-emerald-700 md:hidden"
-      title="View lead info"
-    >
-      <Info className="w-4 h-4" />
-    </button>
-  )}
-  <Link
-    href="/bulk"
-    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors"
-  >
-    <Send className="w-3.5 h-3.5" />
-    <span className="hidden md:block">Bulk Message</span>
-  </Link>
-  <button
-    onClick={() => setDark((d) => !d)}
-    className="p-1.5 rounded-lg text-emerald-100 hover:bg-emerald-700 transition-colors"
-  >
-    {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-  </button>
-</div>
+          {mobileView === 'chat' && selected && (
+            <button
+              onClick={() => setMobileView('lead')}
+              className="p-1.5 rounded-lg text-emerald-100 hover:bg-emerald-700 md:hidden"
+              title="View lead info"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          )}
+          {isAdmin && (
+            <>
+              <Link
+                href="/analytics"
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Analytics</span>
+              </Link>
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Manage Team</span>
+              </button>
+            </>
+          )}
+          <Link
+            href="/bulk"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span className="hidden md:block">Bulk Message</span>
+          </Link>
+          <button
+            onClick={() => setDark((d) => !d)}
+            className="p-1.5 rounded-lg text-emerald-100 hover:bg-emerald-700 transition-colors"
+          >
+            {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="p-1.5 rounded-lg text-emerald-100 hover:bg-emerald-700 transition-colors"
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </header>
 
-      {/* 
-        DESKTOP: three panels side by side
-        MOBILE: one panel at a time 
-      */}
       <div className="flex-1 flex overflow-hidden">
-
-        {/* LEFT: Conversation list */}
         <div className={`
           flex flex-col overflow-hidden border-r border-gray-200 dark:border-gray-800
           ${mobileView === 'list' ? 'flex' : 'hidden'}
-          md:flex md:w-80 md:shrink-0
-          w-full
+          md:flex md:w-80 md:shrink-0 w-full
         `}>
           <ConversationList
             selectedId={selected?.id ?? null}
@@ -113,7 +156,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* CENTER: Chat window */}
         <div className={`
           flex-1 flex flex-col overflow-hidden min-w-0
           ${mobileView === 'chat' ? 'flex' : 'hidden'}
@@ -128,12 +170,10 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* RIGHT: Lead panel */}
         <div className={`
           flex flex-col overflow-hidden border-l border-gray-200 dark:border-gray-800
           ${mobileView === 'lead' ? 'flex' : 'hidden'}
-          md:flex md:w-72 md:shrink-0
-          w-full
+          md:flex md:w-72 md:shrink-0 w-full
         `}>
           <LeadPanel
             conversation={selected}
@@ -141,10 +181,8 @@ export default function DashboardPage() {
             onLeadUpdate={handleLeadUpdate}
           />
         </div>
-
       </div>
 
-      {/* MOBILE: Bottom navigation bar */}
       {selected && (
         <div className="md:hidden flex border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
           <button
