@@ -35,18 +35,20 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [search, setSearch] = useState('')
   const [stage, setStage] = useState('')
   const [unread, setUnread] = useState(false)
-  const [assignedFilter, setAssignedFilter] = useState('all') // all, unassigned, assigned, mine
+  const [assignedFilter, setAssignedFilter] = useState<'all' | 'unassigned' | 'assigned'>('all') // all, unassigned, assigned, mine
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
   const { profile } = useAuth()
 
   const { conversations, loading, refetch } = useConversations({ 
-    search, 
-    stage, 
-    unread,
-    assignFilter 
-  })
+  search, 
+  stage, 
+  unread,
+  assignFilter: assignedFilter as 'all' | 'unassigned' | 'assigned',
+  userId: profile?.id,
+  isAdmin,
+})
 
   useEffect(() => {
     if (profile?.role === 'admin') {
