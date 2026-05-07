@@ -25,75 +25,55 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   }, [])
 
   const fetchUsers = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (!error && data) {
-      setUsers(data)
-    }
-    setLoading(false)
-  }
+  setLoading(true)
+  const res = await fetch('/api/users')
+  const data = await res.json()
+  if (Array.isArray(data)) setUsers(data)
+  setLoading(false)
+}
 
   const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSuccess('')
+  e.preventDefault()
+  setError('')
+  setSuccess('')
 
-    try {
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: formData.email,
-        password: formData.password,
-        email_confirm: true
-      })
+  try {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData)
+    })
 
-      if (authError) throw authError
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
 
-      // Create user profile
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: formData.email,
-          name: formData.name,
-          role: formData.role
-        })
-
-      if (profileError) throw profileError
-
-      setSuccess('User created successfully!')
-      setFormData({ email: '', name: '', password: '', role: 'employee' })
-      setShowAddForm(false)
-      fetchUsers()
-    } catch (err: any) {
-      setError(err.message || 'Failed to create user')
-    }
+    setSuccess('User created successfully!')
+    setFormData({ email: '', name: '', password: '', role: 'employee' })
+    setShowAddForm(false)
+    fetchUsers()
+  } catch (err: any) {
+    setError(err.message || 'Failed to create user')
   }
+}
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return
+const handleDeleteUser = async (userId: string) => {
+  if (!confirm('Are you sure you want to delete this user?')) return
 
-    try {
-      // Delete from auth
-      const { error: authError } = await supabase.auth.admin.deleteUser(userId)
-      if (authError) throw authError
+  try {
+    const res = await fetch('/api/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    })
 
-      // Delete from users table (cascade will handle assignments)
-      const { error: dbError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', userId)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
 
-      if (dbError) throw dbError
-
-      fetchUsers()
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete user')
-    }
+    fetchUsers()
+  } catch (err: any) {
+    setError(err.message || 'Failed to delete user')
   }
+}
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
