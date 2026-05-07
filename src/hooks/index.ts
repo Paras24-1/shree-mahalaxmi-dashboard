@@ -14,6 +14,7 @@ export function useConversations(filters: {
   assignFilter?: 'all' | 'unassigned' | 'assigned'
   userId?: string
   isAdmin?: boolean
+  userRole?: string  // ADD THIS
 } = {}) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,10 +24,11 @@ export function useConversations(filters: {
     if (filters.search) params.set('search', filters.search)
     if (filters.stage)  params.set('stage',  filters.stage)
     if (filters.unread) params.set('unread', 'true')
-    if (!filters.isAdmin && filters.userId)
-      params.set('assigned_to', filters.userId)
-    if (filters.isAdmin && filters.assignFilter && filters.assignFilter !== 'all')
-      params.set('assign_filter', filters.assignFilter)
+   if (filters.userRole === 'employee' && filters.userId) {
+  params.set('assigned_to', filters.userId)
+} else if (filters.userRole === 'admin' && filters.assignFilter && filters.assignFilter !== 'all') {
+  params.set('assign_filter', filters.assignFilter)
+}
 
     const res = await fetch(`/api/conversations?${params}`)
     const data = await res.json()
