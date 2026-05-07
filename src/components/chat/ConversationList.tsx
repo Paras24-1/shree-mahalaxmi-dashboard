@@ -49,7 +49,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   search, 
   stage, 
   unread,
-  assignedFilter,
+  assignFilter: assignedFilter,
   userId: profile?.id,
   isAdmin: !!isAdmin,
   userRole: profile?.role,
