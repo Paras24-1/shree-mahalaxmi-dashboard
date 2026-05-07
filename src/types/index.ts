@@ -4,6 +4,17 @@
 
 export type Direction = 'incoming' | 'outgoing'
 
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'employee'
+  avatar?: string
+}
+
+export type Stage = 'new' | 'interested' | 'booking' | 'confirmed' | 'cancelled' | 'completed'
+
+
 export type Stage =
   | 'new'
   | 'interested'
@@ -16,21 +27,14 @@ export interface Conversation {
   id: string
   phone_number: string
   name: string
-  last_message: string | null
+  last_message?: string
   unread_count: number
   ai_mode: boolean
-  stage: Stage
+  stage: string
+  assigned_to?: string
+  assignment_status?: string
   created_at: string
   updated_at: string
-  lead?: Lead
-  assigned_to?: string | null
-assignment_status?: 'unassigned' | 'assigned' | 'completed' | 'closed'
-assigned_user?: {
-  id: string
-  name: string
-  email: string
-} | null
-
 }
 
 export interface Message {
