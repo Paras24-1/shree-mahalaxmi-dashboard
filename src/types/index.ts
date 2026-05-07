@@ -15,13 +15,7 @@ export interface User {
 export type Stage = 'new' | 'interested' | 'booking' | 'confirmed' | 'cancelled' | 'completed'
 
 
-export type Stage =
-  | 'new'
-  | 'interested'
-  | 'booking'
-  | 'confirmed'
-  | 'cancelled'
-  | 'completed'
+
 
 export interface Conversation {
   id: string
