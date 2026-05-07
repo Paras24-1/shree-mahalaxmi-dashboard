@@ -1,13 +1,12 @@
 'use client'
 
-import { useAuth } from '@/contexts/AuthContext'
-import AssignDropdown from '@/components/admin/AssignDropdown'
-import { UserCheck } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Conversation, Stage } from '@/types'
 import { useConversations } from '@/hooks'
 import { formatDistanceToNow } from 'date-fns'
-import { Search, Filter, Wifi, Trash2, X } from 'lucide-react'
+import { Search, Filter, Wifi, Trash2, X, UserPlus } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 
 const STAGES: Stage[] = ['new', 'interested', 'booking', 'confirmed', 'cancelled', 'completed']
 
@@ -26,25 +25,44 @@ interface Props {
   onDelete?: (id: string) => void
 }
 
-export default function ConversationList({ selectedId, onSelect, onDelete }: Props) {
-  const [search, setSearch]           = useState('')
-  const [stage,  setStage]            = useState('')
-  const [unread, setUnread]           = useState(false)
-  const [confirmId, setConfirmId]     = useState<string | null>(null)
-  const [deleting, setDeleting]       = useState(false)
+interface Employee {
+  id: string
+  name: string
+  email: string
+}
 
+export default function ConversationList({ selectedId, onSelect, onDelete }: Props) {
+  const [search, setSearch] = useState('')
+  const [stage, setStage] = useState('')
+  const [unread, setUnread] = useState(false)
+  const [assignedFilter, setAssignedFilter] = useState('all') // all, unassigned, assigned, mine
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [employees, setEmployees] = useState<Employee[]>([])
   const { profile } = useAuth()
-  const isAdmin = profile?.role === 'admin'
-  const [assignFilter, setAssignFilter] = useState<'all' | 'unassigned' | 'assigned'>('all')
 
   const { conversations, loading, refetch } = useConversations({ 
     search, 
     stage, 
     unread,
-    assignFilter,
-    userId: profile?.id,
-    isAdmin,
+    assignedFilter 
   })
+
+  useEffect(() => {
+    if (profile?.role === 'admin') {
+      fetchEmployees()
+    }
+  }, [profile])
+
+  const fetchEmployees = async () => {
+    const { data } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('role', 'employee')
+      .order('name')
+    
+    if (data) setEmployees(data)
+  }
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -65,6 +83,8 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
       setConfirmId(null)
     }
   }
+
+  const isAdmin = profile?.role === 'admin'
 
   return (
     <aside className="flex flex-col h-full bg-white dark:bg-gray-950">
@@ -103,7 +123,9 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
       {/* Header */}
       <div className="px-4 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Inbox</h1>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {isAdmin ? 'All Conversations' : 'My Chats'}
+          </h1>
           <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
             <Wifi className="w-3 h-3" />
             Live
@@ -123,6 +145,20 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
 
         <div className="flex items-center gap-2 flex-wrap">
           <Filter className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          
+          {/* Assignment Filter (Admin only) */}
+          {isAdmin && (
+            <select
+              value={assignedFilter}
+              onChange={(e) => setAssignedFilter(e.target.value)}
+              className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+            >
+              <option value="all">All chats</option>
+              <option value="unassigned">Unassigned</option>
+              <option value="assigned">Assigned</option>
+            </select>
+          )}
+          
           <select
             value={stage}
             onChange={(e) => setStage(e.target.value)}
@@ -133,6 +169,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
               <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
             ))}
           </select>
+          
           <button
             onClick={() => setUnread((u) => !u)}
             className={`text-xs px-2 py-1 rounded-lg transition-colors ${
@@ -144,25 +181,6 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
             Unread
           </button>
         </div>
-
-        {/* Admin: assign filter tabs */}
-        {isAdmin && (
-          <div className="flex gap-1 mt-2">
-            {(['all', 'unassigned', 'assigned'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setAssignFilter(f)}
-                className={`flex-1 py-1 text-xs font-medium rounded-lg capitalize transition-colors ${
-                  assignFilter === f
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-                    : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* List */}
@@ -174,17 +192,20 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
             <span>No conversations found</span>
           </div>
         ) : (
-          conversations.map((conv) => (
-            <ConversationItem
-              key={conv.id}
-              conversation={conv}
-              isSelected={conv.id === selectedId}
-              onClick={() => onSelect(conv)}
-              onDelete={(e) => handleDelete(e, conv.id)}
-              isAdmin={isAdmin}
-              onAssigned={refetch}
-            />
-          ))
+          [...conversations]
+            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+            .map((conv) => (
+              <ConversationItem
+                key={conv.id}
+                conversation={conv}
+                isSelected={conv.id === selectedId}
+                onClick={() => onSelect(conv)}
+                onDelete={(e) => handleDelete(e, conv.id)}
+                isAdmin={isAdmin}
+                employees={employees}
+                onAssignmentChange={refetch}
+              />
+            ))
         )}
       </div>
     </aside>
@@ -197,21 +218,52 @@ function ConversationItem({
   onClick,
   onDelete,
   isAdmin,
-  onAssigned,
+  employees,
+  onAssignmentChange,
 }: {
   conversation: Conversation
   isSelected: boolean
   onClick: () => void
   onDelete: (e: React.MouseEvent) => void
   isAdmin: boolean
-  onAssigned: () => void
+  employees: Employee[]
+  onAssignmentChange: () => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [showAssign, setShowAssign] = useState(false)
+  const [assigning, setAssigning] = useState(false)
 
   const initials = conv.name
     .split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
   const timeAgo = formatDistanceToNow(new Date(conv.updated_at), { addSuffix: true })
+
+  const assignedEmployee = employees.find(e => e.id === conv.assigned_to)
+
+  const handleAssign = async (e: React.MouseEvent, userId: string) => {
+    e.stopPropagation()
+    setAssigning(true)
+    
+    try {
+      const res = await fetch('/api/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conv.id,
+          assigned_to: userId
+        })
+      })
+
+      if (res.ok) {
+        onAssignmentChange()
+        setShowAssign(false)
+      }
+    } catch (err) {
+      console.error('Assignment failed:', err)
+    } finally {
+      setAssigning(false)
+    }
+  }
 
   return (
     <div
@@ -248,31 +300,46 @@ function ConversationItem({
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
           {conv.last_message || 'No messages yet'}
         </p>
-
         <div className="flex items-center gap-2 mt-1.5">
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS[conv.stage as Stage] || STAGE_COLORS.new}`}>
             {conv.stage}
           </span>
-        </div>
-
-        {/* Assignment */}
-        <div className="flex items-center gap-2 mt-1" onClick={e => e.stopPropagation()}>
-          {isAdmin ? (
-            <AssignDropdown
-              conversationId={conv.id}
-              currentAssignedTo={conv.assigned_to ?? null}
-              currentAssigneeName={(conv as any).assigned_user?.name}
-              onAssigned={onAssigned}
-            />
-          ) : (
-            conv.assigned_to && (
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <UserCheck className="w-3 h-3" /> Assigned to you
-              </span>
-            )
+          
+          {/* Assignment Badge */}
+          {assignedEmployee && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400">
+              → {assignedEmployee.name.split(' ')[0]}
+            </span>
+          )}
+          {!assignedEmployee && isAdmin && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+              Unassigned
+            </span>
           )}
         </div>
       </div>
+
+      {/* Actions */}
+      {hovered && (
+        <div className="flex items-center gap-1 shrink-0">
+          {isAdmin && !showAssign && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowAssign(true); }}
+              className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 hover:bg-blue-100 transition-colors"
+              title="Assign to employee"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+            title="Delete conversation"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Unread badge */}
       {conv.unread_count > 0 && !hovered && (
@@ -281,15 +348,27 @@ function ConversationItem({
         </span>
       )}
 
-      {/* Delete button — shows on hover */}
-      {hovered && (
-        <button
-          onClick={onDelete}
-          className="shrink-0 p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-          title="Delete conversation"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+      {/* Assignment Dropdown */}
+      {showAssign && (
+        <div className="absolute right-2 top-2 z-10 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 min-w-[160px]">
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 px-2">Assign to:</p>
+          {employees.map((emp) => (
+            <button
+              key={emp.id}
+              onClick={(e) => handleAssign(e, emp.id)}
+              disabled={assigning}
+              className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+            >
+              {emp.name}
+            </button>
+          ))}
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowAssign(false); }}
+            className="w-full mt-1 px-3 py-2 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+          >
+            Cancel
+          </button>
+        </div>
       )}
     </div>
   )
