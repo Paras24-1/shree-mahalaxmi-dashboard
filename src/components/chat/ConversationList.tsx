@@ -153,7 +153,9 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
           {isAdmin && (
             <select
               value={assignedFilter}
-              onChange={(e) => setAssignedFilter(e.target.value)}
+              onChange={(e) =>
+  setAssignedFilter(e.target.value as 'all' | 'unassigned' | 'assigned')
+}
               className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
             >
               <option value="all">All chats</option>
