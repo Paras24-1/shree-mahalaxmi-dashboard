@@ -6,7 +6,48 @@ import { Conversation, Message } from '@/types'
 
 // ----------------------------------------------------------------
 // useConversations — fetches + subscribes to all conversations
-// ----------------------------------------------------------------
+// ------------------------------------------------export function useConversations(filters: {
+  search?: string
+  stage?: string
+  unread?: boolean
+  assignedFilter?: string
+} = {}) {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchConversations = useCallback(async () => {
+    const params = new URLSearchParams()
+    if (filters.search) params.set('search', filters.search)
+    if (filters.stage)  params.set('stage',  filters.stage)
+    if (filters.unread) params.set('unread', 'true')
+    if (filters.assignedFilter) params.set('assignedFilter', filters.assignedFilter)
+
+    const res = await fetch(`/api/conversations?${params}`)
+    const data = await res.json()
+    if (Array.isArray(data)) setConversations(data)
+    setLoading(false)
+  }, [filters.search, filters.stage, filters.unread, filters.assignedFilter])
+
+  useEffect(() => {
+    fetchConversations()
+  }, [fetchConversations])
+
+  // Subscribe to real-time changes on conversations
+  useEffect(() => {
+    const channel = supabase
+      .channel('conversations-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversations' },
+        () => fetchConversations()
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchConversations])
+
+  return { conversations, loading, refetch: fetchConversations }
+}----------------
 export function useConversations(filters: {
   search?: string
   stage?: string
@@ -160,4 +201,47 @@ export function useToggleAI() {
     []
   )
   return { toggleAI }
+}
+
+export function useConversations(filters: {
+  search?: string
+  stage?: string
+  unread?: boolean
+  assignedFilter?: string
+} = {}) {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchConversations = useCallback(async () => {
+    const params = new URLSearchParams()
+    if (filters.search) params.set('search', filters.search)
+    if (filters.stage)  params.set('stage',  filters.stage)
+    if (filters.unread) params.set('unread', 'true')
+    if (filters.assignedFilter) params.set('assignedFilter', filters.assignedFilter)
+
+    const res = await fetch(`/api/conversations?${params}`)
+    const data = await res.json()
+    if (Array.isArray(data)) setConversations(data)
+    setLoading(false)
+  }, [filters.search, filters.stage, filters.unread, filters.assignedFilter])
+
+  useEffect(() => {
+    fetchConversations()
+  }, [fetchConversations])
+
+  // Subscribe to real-time changes on conversations
+  useEffect(() => {
+    const channel = supabase
+      .channel('conversations-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversations' },
+        () => fetchConversations()
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchConversations])
+
+  return { conversations, loading, refetch: fetchConversations }
 }
