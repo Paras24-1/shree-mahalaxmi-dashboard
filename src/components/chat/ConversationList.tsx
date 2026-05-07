@@ -49,9 +49,10 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   search, 
   stage, 
   unread,
-  assignFilter: assignedFilter as 'all' | 'unassigned' | 'assigned',
+  assignedFilter,
   userId: profile?.id,
-  isAdmin,
+  isAdmin: !!isAdmin,
+  userRole: profile?.role,
 })
 
   useEffect(() => {
