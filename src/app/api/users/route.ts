@@ -19,6 +19,17 @@ export async function POST(req: NextRequest) {
   try {
     const { email, password, name, role } = await req.json()
 
+    const { count } = await supabaseAdmin
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'employee')
+
+    if ((count ?? 0) >= 3) {
+      return NextResponse.json({ 
+        error: 'Your plan includes 3 users. To add more users contact voxai4278@gmail.com' 
+      }, { status: 403 })
+    }
+
     // Create auth user using admin client
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
