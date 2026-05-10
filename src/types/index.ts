@@ -55,6 +55,7 @@ export interface Lead {
   lead_quality?: string
   callback_ready?: string
   conversation_summary?: string
+  lead_score?: string  // ← ADD THIS
 }
 // n8n / Webhook payload
 export interface WebhookPayload {
