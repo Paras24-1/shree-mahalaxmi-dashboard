@@ -202,7 +202,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
                   )}
                 </div>
                 <p className={`text-xs text-gray-400 mt-1 ${msg.direction === 'outgoing' ? 'text-right' : 'text-left'}`}>
-                  {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
+                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
