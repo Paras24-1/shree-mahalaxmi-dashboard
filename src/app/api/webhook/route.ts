@@ -49,9 +49,9 @@ export async function POST(req: NextRequest) {
 
     // 2. Get next employee only for NEW conversations
     let assignedTo = existing?.assigned_to || null
-    if (!existing && direction === 'incoming') {
-      assignedTo = await getNextEmployee()
-    }
+if (direction === 'incoming' && !assignedTo) {
+  assignedTo = await getNextEmployee()
+}
 
     // 3. Upsert conversation with assignment
     const { data: conversation, error: convError } = await supabaseAdmin
