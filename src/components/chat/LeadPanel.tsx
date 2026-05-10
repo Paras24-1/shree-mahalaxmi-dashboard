@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react'
 import { Conversation, Lead } from '@/types'
 import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp } from 'lucide-react'
-import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare } from 'lucide-react'
 
 export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   conversation: Conversation | null
