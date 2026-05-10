@@ -55,6 +55,14 @@ if (direction === 'incoming' && !assignedTo) {
   assignedTo = await getNextEmployee()
 }
 
+    console.log('[webhook debug]', {
+  phone_number,
+  direction,
+  existing: existing?.id,
+  existing_assigned_to: existing?.assigned_to,
+  assignedTo
+})
+
     // 3. Upsert conversation with assignment
     const { data: conversation, error: convError } = await supabaseAdmin
       .from('conversations')
