@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Conversation, Lead } from '@/types'
+import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp } from 'lucide-react'
 import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare } from 'lucide-react'
 
 export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
@@ -71,6 +72,7 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
             <InfoCard icon={MapPin} label="City" value={data.city} />
             <InfoCard icon={Wrench} label="Machine Interest" value={data.machine_interest} />
             <InfoCard icon={Star} label="Lead Quality" value={data.lead_quality} badge colored />
+            <InfoCard icon={TrendingUp} label="Lead Score" value={data.lead_score} badge colored />
             <InfoCard icon={CheckCircle} label="Callback Ready" value={data.callback_ready} badge />
 
             {data.conversation_summary && (
@@ -122,11 +124,11 @@ function InfoCard({ icon: Icon, label, value, badge, colored }: {
       {badge ? (
         <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-semibold ${
           colored
-            ? value.toLowerCase() === 'high'
+            ? value.toLowerCase() === 'high' || parseInt(value) >= 80
               ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-              : value.toLowerCase() === 'medium'
+              : value.toLowerCase() === 'medium' || (parseInt(value) >= 50 && parseInt(value) < 80)
               ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
-              : value.toLowerCase() === 'low'
+              : value.toLowerCase() === 'low' || parseInt(value) < 50
               ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
               : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
             : value.toLowerCase() === 'yes'
