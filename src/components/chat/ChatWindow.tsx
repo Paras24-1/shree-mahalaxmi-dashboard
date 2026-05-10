@@ -137,7 +137,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white dark:bg-gray-950">
+    <div className="flex-1 flex flex-col bg-white dark:bg-gray-950 min-h-0">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center justify-between shrink-0">
         <div>
