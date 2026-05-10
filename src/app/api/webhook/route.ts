@@ -4,29 +4,26 @@ import { supabaseAdmin } from '@/lib/supabase'
 async function getNextEmployee(): Promise<string | null> {
   const { data: employees } = await supabaseAdmin
     .from('users')
-    .select('id, created_at')
+    .select('id')
     .eq('role', 'employee')
     .order('created_at', { ascending: true })
 
   if (!employees || employees.length === 0) return null
 
-  const counts = await Promise.all(
-    employees.map(async (emp) => {
-      const { count } = await supabaseAdmin
-        .from('conversations')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_to', emp.id)
-      return { id: emp.id, count: count ?? 0, created_at: emp.created_at }
-    })
-  )
+  // Get the last assigned conversation to find who was assigned last
+  const { data: lastAssigned } = await supabaseAdmin
+    .from('conversations')
+    .select('assigned_to')
+    .not('assigned_to', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
 
-  // Sort by count first, then by created_at to break ties fairly
-  counts.sort((a, b) => {
-    if (a.count !== b.count) return a.count - b.count
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  })
+  const lastEmployeeId = lastAssigned?.assigned_to
+  const lastIndex = employees.findIndex(e => e.id === lastEmployeeId)
+  const nextIndex = (lastIndex + 1) % employees.length
 
-  return counts[0].id
+  return employees[nextIndex].id
 }
 
 export async function POST(req: NextRequest) {
