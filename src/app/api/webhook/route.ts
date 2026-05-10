@@ -2,28 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 async function getNextEmployee(): Promise<string | null> {
-  // Get all employees
   const { data: employees } = await supabaseAdmin
     .from('users')
-    .select('id')
+    .select('id, created_at')
     .eq('role', 'employee')
     .order('created_at', { ascending: true })
 
   if (!employees || employees.length === 0) return null
 
-  // Count how many conversations each employee has assigned
   const counts = await Promise.all(
     employees.map(async (emp) => {
       const { count } = await supabaseAdmin
         .from('conversations')
         .select('*', { count: 'exact', head: true })
         .eq('assigned_to', emp.id)
-      return { id: emp.id, count: count ?? 0 }
+      return { id: emp.id, count: count ?? 0, created_at: emp.created_at }
     })
   )
 
-  // Assign to employee with least conversations (round-robin effect)
-  counts.sort((a, b) => a.count - b.count)
+  // Sort by count first, then by created_at to break ties fairly
+  counts.sort((a, b) => {
+    if (a.count !== b.count) return a.count - b.count
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+
   return counts[0].id
 }
 
