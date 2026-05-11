@@ -27,3 +27,23 @@ export async function DELETE(
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { id } = params
+    const body = await req.json()
+
+    const { error } = await supabaseAdmin
+      .from('conversations')
+      .update(body)
+      .eq('id', id)
+
+    if (error) throw error
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
