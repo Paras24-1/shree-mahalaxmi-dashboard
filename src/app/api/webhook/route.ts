@@ -78,10 +78,9 @@ export async function POST(req: NextRequest) {
       assignedTo
     })
 
-    const autoStage =
-      direction === 'incoming'
-        ? getAutoStage(lead_quality, callback_ready)
-        : undefined
+    const autoStage = lead_quality 
+  ? getAutoStage(lead_quality, callback_ready) 
+  : undefined
 
     // 3. Upsert conversation with assignment
     const { data: conversation, error: convError } = await supabaseAdmin
