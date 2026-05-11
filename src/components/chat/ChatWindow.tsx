@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { Conversation } from '@/types'
 import { useMessages, useSendMessage } from '@/hooks'
 import { formatDistanceToNow } from 'date-fns'
-import { Send, Bot, User, Loader2, Paperclip, X, Image as ImageIcon } from 'lucide-react'
+import { Send, Bot, User, Loader2, Paperclip, X, Tag } from 'lucide-react'
 
 interface Props {
   conversation: Conversation | null
@@ -16,6 +16,20 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+
+  const STAGES = ['new', 'interested', 'booking', 'confirmed', 'cancelled', 'completed'] as const
+  const STAGE_COLORS: Record<string, string> = {
+    new:        'bg-gray-100 text-gray-600',
+    interested: 'bg-blue-100 text-blue-700',
+    booking:    'bg-amber-100 text-amber-700',
+    confirmed:  'bg-green-100 text-green-700',
+    cancelled:  'bg-red-100 text-red-600',
+    completed:  'bg-purple-100 text-purple-700',
+  }
+
+  const [stage, setStage] = useState(conversation?.stage || 'new')
+  const [savingStage, setSavingStage] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   const { messages, loading, bottomRef } = useMessages(conversation?.id || null)
@@ -126,6 +140,20 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
     onAIToggle(conversation.id, newMode)
   }
 
+  const handleStageChange = async (newStage: string) => {
+    if (!conversation) return
+    setSavingStage(true)
+    setStage(newStage)
+
+    await fetch(`/api/conversations/${conversation.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: newStage })
+    })
+
+    setSavingStage(false)
+  }
+
   if (!conversation) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-950">
@@ -144,26 +172,48 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{conversation.name}</h2>
           <p className="text-xs text-gray-500">{conversation.phone_number}</p>
         </div>
-        <button
-          onClick={toggleAI}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
-            conversation.ai_mode
-              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-              : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400'
-          }`}
-        >
-          {conversation.ai_mode ? (
-            <>
-              <Bot className="w-3.5 h-3.5" />
-              AI Mode
-            </>
-          ) : (
-            <>
-              <User className="w-3.5 h-3.5" />
-              Manual
-            </>
-          )}
-        </button>
+
+        <div className="flex items-center gap-2">
+          {/* Stage Selector */}
+          <div className="flex items-center gap-1.5">
+            <Tag className="w-3.5 h-3.5 text-gray-400" />
+
+            <select
+              value={stage}
+              onChange={(e) => handleStageChange(e.target.value)}
+              disabled={savingStage}
+              className={`text-xs px-2 py-1 rounded-lg font-medium border-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer disabled:opacity-50 ${STAGE_COLORS[stage]}`}
+            >
+              {STAGES.map(s => (
+                <option key={s} value={s}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* AI Toggle */}
+          <button
+            onClick={toggleAI}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+              conversation.ai_mode
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400'
+            }`}
+          >
+            {conversation.ai_mode ? (
+              <>
+                <Bot className="w-3.5 h-3.5" />
+                AI Mode
+              </>
+            ) : (
+              <>
+                <User className="w-3.5 h-3.5" />
+                Manual
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -197,10 +247,12 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
                       className="rounded-lg mb-2 max-w-full h-auto"
                     />
                   )}
+
                   {msg.message && (
                     <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
                   )}
                 </div>
+
                 <p className={`text-xs text-gray-400 mt-1 ${msg.direction === 'outgoing' ? 'text-right' : 'text-left'}`}>
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
@@ -208,6 +260,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
             </div>
           ))
         )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -221,6 +274,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
                 alt="Preview"
                 className="w-16 h-16 rounded-lg object-cover border-2 border-emerald-500"
               />
+
               <button
                 onClick={handleRemoveImage}
                 className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600"
@@ -228,6 +282,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
                 <X className="w-3 h-3" />
               </button>
             </div>
+
             <div className="flex-1">
               <p className="text-xs font-medium text-gray-900 dark:text-white">{imageFile?.name}</p>
               <p className="text-xs text-gray-500">{(imageFile!.size / 1024).toFixed(1)} KB</p>
@@ -246,6 +301,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
             accept="image/*"
             className="hidden"
           />
+
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading || sending || !!imageFile}
@@ -254,6 +310,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
           >
             <Paperclip className="w-5 h-5" />
           </button>
+
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -263,6 +320,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
             className="flex-1 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
             style={{ minHeight: '40px', maxHeight: '120px' }}
           />
+
           <button
             onClick={handleSend}
             disabled={(!input.trim() && !imageFile) || sending || uploading}
