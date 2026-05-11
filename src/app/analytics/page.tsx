@@ -189,18 +189,7 @@ function AnalyticsContent() {
             value={stats.total_unassigned}
             color="amber"
           />
-          <StatCard
-            icon={<TrendingUp className="w-5 h-5" />}
-            label="Active"
-            value={stats.total_active}
-            color="purple"
-          />
-          <StatCard
-            icon={<CheckCircle className="w-5 h-5" />}
-            label="Completed"
-            value={stats.total_completed}
-            color="emerald"
-          />
+    
     
         </div>
 
