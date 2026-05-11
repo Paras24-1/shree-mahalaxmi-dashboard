@@ -18,6 +18,14 @@ interface EmployeeStats {
 }
 
 interface Stats {
+  stage_counts: {
+  new: number
+  interested: number
+  booking: number
+  confirmed: number
+  completed: number
+  cancelled: number
+}
   total_conversations: number
   total_assigned: number
   total_unassigned: number
@@ -79,8 +87,17 @@ function AnalyticsContent() {
             completed
           }
         })
+        const stageCounts = {
+  new: conversations.filter(c => (c.stage || 'new') === 'new').length,
+  interested: conversations.filter(c => c.stage === 'interested').length,
+  booking: conversations.filter(c => c.stage === 'booking').length,
+  confirmed: conversations.filter(c => c.stage === 'confirmed').length,
+  completed: conversations.filter(c => c.stage === 'completed').length,
+  cancelled: conversations.filter(c => c.stage === 'cancelled').length,
+}
 
         setStats({
+          stage_counts: stageCounts,
           total_conversations: conversations.length,
           total_assigned: conversations.filter(c => c.assigned_to).length,
           total_unassigned: conversations.filter(c => !c.assigned_to).length,
@@ -184,7 +201,18 @@ function AnalyticsContent() {
             value={stats.total_completed}
             color="emerald"
           />
+    
         </div>
+
+           {/* Lead Stages */}
+<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+  <StageCard label="New" value={stats.stage_counts.new} color="gray" />
+  <StageCard label="Interested" value={stats.stage_counts.interested} color="blue" />
+  <StageCard label="Booking" value={stats.stage_counts.booking} color="amber" />
+  <StageCard label="Confirmed" value={stats.stage_counts.confirmed} color="green" />
+  <StageCard label="Completed" value={stats.stage_counts.completed} color="purple" />
+  <StageCard label="Cancelled" value={stats.stage_counts.cancelled} color="red" />
+</div>
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -336,6 +364,28 @@ function StatCard({ icon, label, value, color }: {
       </div>
       <p className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
+    </div>
+  )
+}
+
+function StageCard({ label, value, color }: {
+  label: string
+  value: number
+  color: string
+}) {
+  const colorClasses = {
+    gray: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+    blue: 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400',
+    amber: 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400',
+    green: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400',
+    purple: 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-400',
+    red: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400',
+  }
+
+  return (
+    <div className={`rounded-2xl p-5 border border-gray-200 dark:border-gray-800 ${colorClasses[color as keyof typeof colorClasses]}`}>
+      <p className="text-2xl font-bold mb-1">{value}</p>
+      <p className="text-xs font-medium opacity-80">{label}</p>
     </div>
   )
 }
