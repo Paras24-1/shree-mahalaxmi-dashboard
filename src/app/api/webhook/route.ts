@@ -26,10 +26,27 @@ async function getNextEmployee(): Promise<string | null> {
   return employees[nextIndex].id
 }
 
+function getAutoStage(leadQuality?: string, callbackReady?: string): string {
+  if (callbackReady === 'yes' && leadQuality === 'hot') return 'confirmed'
+  if (leadQuality === 'hot') return 'booking'
+  if (leadQuality === 'warm') return 'interested'
+  return 'new'
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { phone_number, message, direction, name, media_url, media_type } = body
+
+    const {
+      phone_number,
+      message,
+      direction,
+      name,
+      media_url,
+      media_type,
+      lead_quality,
+      callback_ready
+    } = body
 
     if (!phone_number || !direction) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -48,17 +65,23 @@ export async function POST(req: NextRequest) {
 
     // 2. Get next employee only for NEW conversations
     let assignedTo = existing?.assigned_to || null
-if (direction === 'incoming' && !assignedTo) {
-  assignedTo = await getNextEmployee()
-}
+
+    if (direction === 'incoming' && !assignedTo) {
+      assignedTo = await getNextEmployee()
+    }
 
     console.log('[webhook debug]', {
-  phone_number,
-  direction,
-  existing: existing?.id,
-  existing_assigned_to: existing?.assigned_to,
-  assignedTo
-})
+      phone_number,
+      direction,
+      existing: existing?.id,
+      existing_assigned_to: existing?.assigned_to,
+      assignedTo
+    })
+
+    const autoStage =
+      direction === 'incoming'
+        ? getAutoStage(lead_quality, callback_ready)
+        : undefined
 
     // 3. Upsert conversation with assignment
     const { data: conversation, error: convError } = await supabaseAdmin
@@ -68,8 +91,13 @@ if (direction === 'incoming' && !assignedTo) {
           phone_number,
           name: contactName,
           last_message: msgText,
-          ...(direction === 'incoming' ? { updated_at: new Date().toISOString() } : {}),
-          ...(assignedTo ? { assigned_to: assignedTo, assignment_status: 'assigned' } : {})
+          ...(direction === 'incoming'
+            ? { updated_at: new Date().toISOString() }
+            : {}),
+          ...(assignedTo
+            ? { assigned_to: assignedTo, assignment_status: 'assigned' }
+            : {}),
+          ...(autoStage ? { stage: autoStage } : {})
         },
         { onConflict: 'phone_number' }
       )
@@ -87,7 +115,7 @@ if (direction === 'incoming' && !assignedTo) {
         message: msgText,
         direction,
         timestamp: timestamp.toISOString(),
-        media_url:  media_url  || null,
+        media_url: media_url || null,
         media_type: media_type || null,
       })
       .select()
@@ -124,9 +152,9 @@ if (direction === 'incoming' && !assignedTo) {
         })
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      conversation_id: conversation.id, 
+    return NextResponse.json({
+      success: true,
+      conversation_id: conversation.id,
       message_id: msg.id,
       assigned_to: assignedTo
     })
