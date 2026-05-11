@@ -30,10 +30,8 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
   const [stage, setStage] = useState(conversation?.stage || 'new')
   const [savingStage, setSavingStage] = useState(false)
   useEffect(() => {
-  if (conversation?.stage) {
-    setStage(conversation.stage)
-  }
-}, [conversation?.stage])
+  setStage(conversation?.stage || 'new')
+}, [conversation?.id, conversation?.stage])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   
