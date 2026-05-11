@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Conversation } from '@/types'
 import { useMessages, useSendMessage } from '@/hooks'
 import { formatDistanceToNow } from 'date-fns'
@@ -29,6 +29,11 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
 
   const [stage, setStage] = useState(conversation?.stage || 'new')
   const [savingStage, setSavingStage] = useState(false)
+  useEffect(() => {
+  if (conversation?.stage) {
+    setStage(conversation.stage)
+  }
+}, [conversation?.stage])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   
