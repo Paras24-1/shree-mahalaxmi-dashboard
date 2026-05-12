@@ -26,13 +26,6 @@ async function getNextEmployee(): Promise<string | null> {
   return employees[nextIndex].id
 }
 
-function getAutoStage(leadQuality?: string, callbackReady?: string): string {
-  if (callbackReady === 'yes' && leadQuality === 'hot') return 'confirmed'
-  if (leadQuality === 'hot') return 'booking'
-  if (leadQuality === 'warm') return 'interested'
-  return 'new'
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -43,9 +36,7 @@ export async function POST(req: NextRequest) {
       direction,
       name,
       media_url,
-      media_type,
-      lead_quality,
-      callback_ready
+      media_type
     } = body
 
     if (!phone_number || !direction) {
@@ -78,10 +69,6 @@ export async function POST(req: NextRequest) {
       assignedTo
     })
 
-    const autoStage = lead_quality 
-  ? getAutoStage(lead_quality, callback_ready) 
-  : undefined
-
     // 3. Upsert conversation with assignment
     const { data: conversation, error: convError } = await supabaseAdmin
       .from('conversations')
@@ -95,8 +82,7 @@ export async function POST(req: NextRequest) {
             : {}),
           ...(assignedTo
             ? { assigned_to: assignedTo, assignment_status: 'assigned' }
-            : {}),
-          ...(autoStage ? { stage: autoStage } : {})
+            : {})
         },
         { onConflict: 'phone_number' }
       )
