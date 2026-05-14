@@ -137,12 +137,24 @@ export async function POST(req: NextRequest) {
         })
     }
 
-    return NextResponse.json({
-      success: true,
-      conversation_id: conversation.id,
-      message_id: msg.id,
-      assigned_to: assignedTo
-    })
+    // Fetch employee name if assigned
+let assignedEmployeeName = null
+if (assignedTo) {
+  const { data: empData } = await supabaseAdmin
+    .from('users')
+    .select('name')
+    .eq('id', assignedTo)
+    .single()
+  assignedEmployeeName = empData?.name || null
+}
+
+return NextResponse.json({ 
+  success: true, 
+  conversation_id: conversation.id, 
+  message_id: msg.id,
+  assigned_to: assignedTo,
+  assigned_employee_name: assignedEmployeeName
+})
 
   } catch (err) {
     console.error('[webhook]', err)
