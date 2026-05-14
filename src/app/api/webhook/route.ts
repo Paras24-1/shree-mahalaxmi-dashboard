@@ -138,14 +138,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch employee name if assigned
-let assignedEmployeeName = null
+let assignedEmployeeName = 
+let assignedEmployeePhone = null
 if (assignedTo) {
   const { data: empData } = await supabaseAdmin
-    .from('users')
-    .select('name')
-    .eq('id', assignedTo)
-    .single()
-  assignedEmployeeName = empData?.name || null
+  .from('users')
+  .select('name, phone')
+  .eq('id', assignedTo)
+  .single()
+assignedEmployeeName = empData?.name || null
+assignedEmployeePhone = empData?.phone || null
 }
 
 return NextResponse.json({ 
@@ -153,7 +155,8 @@ return NextResponse.json({
   conversation_id: conversation.id, 
   message_id: msg.id,
   assigned_to: assignedTo,
-  assigned_employee_name: assignedEmployeeName
+  assigned_employee_name: assignedEmployeeName,
+  assigned_employee_phone: assignedEmployeePhone
 })
 
   } catch (err) {
