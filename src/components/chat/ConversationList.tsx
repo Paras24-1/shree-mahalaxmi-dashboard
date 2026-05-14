@@ -129,14 +129,21 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
       {/* Header */}
       <div className="px-4 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {isAdmin ? 'All Conversations' : 'My Chats'}
-          </h1>
-          <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-            <Wifi className="w-3 h-3" />
-            Live
-          </span>
-        </div>
+  <div>
+    <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+      {isAdmin ? 'All Conversations' : 'My Chats'}
+    </h1>
+    {!isAdmin && profile?.name && (
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        👤 {profile.name}
+      </p>
+    )}
+  </div>
+  <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+    <Wifi className="w-3 h-3" />
+    Live
+  </span>
+</div>
 
         <div className="relative mb-2">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
