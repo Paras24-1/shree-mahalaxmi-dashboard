@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch employee name if assigned
-let assignedEmployeeName = 
+let assignedEmployeeName = null
 let assignedEmployeePhone = null
 if (assignedTo) {
   const { data: empData } = await supabaseAdmin
