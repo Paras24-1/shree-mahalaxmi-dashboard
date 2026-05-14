@@ -20,6 +20,9 @@ export function useConversations(filters: {
   const [loading, setLoading] = useState(true)
 
   const fetchConversations = useCallback(async () => {
+    // Wait until we know the user's role before fetching
+    if (!filters.userRole || !filters.userId) return
+
     const params = new URLSearchParams()
 
     if (filters.search) params.set('search', filters.search)
