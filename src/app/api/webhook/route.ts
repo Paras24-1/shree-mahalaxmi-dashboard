@@ -6,6 +6,7 @@ async function getNextEmployee(): Promise<string | null> {
     .from('users')
     .select('id')
     .eq('role', 'employee')
+    .eq('is_active', true)
     .order('created_at', { ascending: true })
 
   if (!employees || employees.length === 0) return null
