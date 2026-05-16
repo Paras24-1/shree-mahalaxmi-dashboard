@@ -71,3 +71,19 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 })
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { userId, is_active } = await req.json()
+
+    const { error } = await supabaseAdmin
+      .from('users')
+      .update({ is_active })
+      .eq('id', userId)
+
+    if (error) throw error
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || String(err) }, { status: 500 })
+  }
+}
