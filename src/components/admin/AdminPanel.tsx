@@ -9,6 +9,7 @@ interface User {
   email: string
   name: string
   role: 'admin' | 'employee'
+  is_active: boolean
   created_at: string
 }
 
@@ -16,7 +17,12 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [formData, setFormData] = useState({ email: '', name: '', password: '', role: 'employee' as 'admin' | 'employee' })
+  const [formData, setFormData] = useState({
+    email: '',
+    name: '',
+    password: '',
+    role: 'employee' as 'admin' | 'employee'
+  })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -25,55 +31,72 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   }, [])
 
   const fetchUsers = async () => {
-  setLoading(true)
-  const res = await fetch('/api/users')
-  const data = await res.json()
-  if (Array.isArray(data)) setUsers(data)
-  setLoading(false)
-}
+    setLoading(true)
+    const res = await fetch('/api/users')
+    const data = await res.json()
+    if (Array.isArray(data)) setUsers(data)
+    setLoading(false)
+  }
 
   const handleAddUser = async (e: React.FormEvent) => {
-  e.preventDefault()
-  setError('')
-  setSuccess('')
+    e.preventDefault()
+    setError('')
+    setSuccess('')
 
-  try {
-    const res = await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    })
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
 
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
 
-    setSuccess('User created successfully!')
-    setFormData({ email: '', name: '', password: '', role: 'employee' })
-    setShowAddForm(false)
-    fetchUsers()
-  } catch (err: any) {
-    setError(err.message || 'Failed to create user')
+      setSuccess('User created successfully!')
+      setFormData({ email: '', name: '', password: '', role: 'employee' })
+      setShowAddForm(false)
+      fetchUsers()
+    } catch (err: any) {
+      setError(err.message || 'Failed to create user')
+    }
   }
-}
 
-const handleDeleteUser = async (userId: string) => {
-  if (!confirm('Are you sure you want to delete this user?')) return
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return
 
-  try {
-    const res = await fetch('/api/users', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId })
-    })
+    try {
+      const res = await fetch('/api/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      })
 
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
 
-    fetchUsers()
-  } catch (err: any) {
-    setError(err.message || 'Failed to delete user')
+      fetchUsers()
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete user')
+    }
   }
-}
+
+  const handleToggleActive = async (userId: string, currentStatus: boolean) => {
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, is_active: !currentStatus })
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+
+      fetchUsers()
+    } catch (err: any) {
+      setError(err.message || 'Failed to update user')
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -82,8 +105,11 @@ const handleDeleteUser = async (userId: string) => {
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Team Management</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Team Management
+            </h2>
           </div>
+
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -119,40 +145,56 @@ const handleDeleteUser = async (userId: string) => {
 
           {/* Add User Form */}
           {showAddForm && (
-            <form onSubmit={handleAddUser} className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Create New User</h3>
-              
+            <form
+              onSubmit={handleAddUser}
+              className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl space-y-3"
+            >
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                Create New User
+              </h3>
+
               <input
                 type="text"
                 placeholder="Full Name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
                 required
               />
-              
+
               <input
                 type="email"
                 placeholder="Email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
                 required
               />
-              
+
               <input
                 type="password"
                 placeholder="Password (min 6 characters)"
                 value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
                 required
                 minLength={6}
               />
-              
+
               <select
                 value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'employee' })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    role: e.target.value as 'admin' | 'employee'
+                  })
+                }
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
               >
                 <option value="employee">Employee</option>
@@ -166,11 +208,17 @@ const handleDeleteUser = async (userId: string) => {
                 >
                   Create User
                 </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddForm(false)
-                    setFormData({ email: '', name: '', password: '', role: 'employee' })
+                    setFormData({
+                      email: '',
+                      name: '',
+                      password: '',
+                      role: 'employee'
+                    })
                   }}
                   className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium"
                 >
@@ -183,9 +231,13 @@ const handleDeleteUser = async (userId: string) => {
           {/* Users List */}
           <div className="space-y-2">
             {loading ? (
-              <p className="text-center text-gray-500 py-8">Loading users...</p>
+              <p className="text-center text-gray-500 py-8">
+                Loading users...
+              </p>
             ) : users.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No users found</p>
+              <p className="text-center text-gray-500 py-8">
+                No users found
+              </p>
             ) : (
               users.map((user) => (
                 <div
@@ -194,21 +246,62 @@ const handleDeleteUser = async (userId: string) => {
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-semibold text-sm">
-                      {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                      {user.name
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .toUpperCase()}
                     </div>
+
                     <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
-                      <p className="text-xs text-gray-500">{user.email}</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {user.name}
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        {user.email}
+                      </p>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                      user.role === 'admin'
-                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
-                    }`}>
+                    <span
+                      className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                        user.role === 'admin'
+                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400'
+                          : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
+                      }`}
+                    >
                       {user.role}
                     </span>
+
+                    {/* Active/Inactive toggle — only for employees */}
+                    {user.role === 'employee' && (
+                      <button
+                        onClick={() =>
+                          handleToggleActive(user.id, user.is_active)
+                        }
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          user.is_active
+                            ? 'bg-emerald-500'
+                            : 'bg-gray-300 dark:bg-gray-600'
+                        }`}
+                        title={
+                          user.is_active
+                            ? 'Click to deactivate'
+                            : 'Click to activate'
+                        }
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            user.is_active
+                              ? 'translate-x-4'
+                              : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleDeleteUser(user.id)}
                       className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 transition-colors"
