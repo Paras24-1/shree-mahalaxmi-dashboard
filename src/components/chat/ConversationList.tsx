@@ -251,8 +251,8 @@ function ConversationItem({
   const [showAssign, setShowAssign] = useState(false)
   const [assigning, setAssigning] = useState(false)
 
-  const initials = conv.name
-    .split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+  const initials = (conv.name || conv.phone_number || 'U')
+  .split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
   const timeAgo = formatDistanceToNow(new Date(conv.updated_at), { addSuffix: true })
 
