@@ -8,7 +8,7 @@ import { Search, Filter, Wifi, Trash2, X, UserPlus } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
-const STAGES: Stage[] = ['new', 'interested', 'booking', 'confirmed', 'cancelled', 'completed', 'followup', 'not_interested']
+const STAGES: Stage[] = ['new', 'interested', 'booking', 'confirmed', 'cancelled', 'completed', 'followup', 'not_interested', 'call_done']
 
 const STAGE_COLORS: Record<Stage, string> = {
   new:        'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
@@ -19,6 +19,8 @@ const STAGE_COLORS: Record<Stage, string> = {
   completed:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
   followup:      'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
   not_interested:'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+    call_done:      'bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300',
+
 
 }
 
