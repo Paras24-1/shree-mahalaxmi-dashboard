@@ -17,7 +17,7 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
 
-  const STAGES = ['new', 'interested', 'booking', 'confirmed', 'cancelled', 'completed'] as const
+  const STAGES = ['new', 'interested', 'booking', 'confirmed', 'cancelled', 'completed', 'followup', 'not_interested'] as const
   const STAGE_COLORS: Record<string, string> = {
     new:        'bg-gray-100 text-gray-600',
     interested: 'bg-blue-100 text-blue-700',
@@ -25,6 +25,9 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
     confirmed:  'bg-green-100 text-green-700',
     cancelled:  'bg-red-100 text-red-600',
     completed:  'bg-purple-100 text-purple-700',
+   followup:      'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+  not_interested:'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+
   }
 
   const [stage, setStage] = useState(conversation?.stage || 'new')
