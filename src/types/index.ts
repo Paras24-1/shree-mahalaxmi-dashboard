@@ -21,6 +21,7 @@ export type Stage =
   | 'completed'
   | 'followup'
   | 'not_interested'
+  | 'call_done'
 
 
 
