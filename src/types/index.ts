@@ -27,12 +27,13 @@ export type Stage =
 export interface Conversation {
   id: string
   phone_number: string
-  name: string
+  name?: string
   last_message?: string
   unread_count: number
   ai_mode: boolean
   stage: string
-  assigned_to?: string
+  notes?: string        // ← add this
+  assigned_to?: string | null
   assignment_status?: string
   created_at: string
   updated_at: string
