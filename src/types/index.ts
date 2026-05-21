@@ -12,8 +12,15 @@ export interface User {
   avatar?: string
 }
 
-export type Stage = 'new' | 'interested' | 'booking' | 'confirmed' | 'cancelled' | 'completed'
-
+export type Stage =
+  | 'new'
+  | 'interested'
+  | 'booking'
+  | 'confirmed'
+  | 'cancelled'
+  | 'completed'
+  | 'followup'
+  | 'not_interested'
 
 
 
