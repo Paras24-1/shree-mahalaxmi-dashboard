@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Conversation, Lead } from '@/types'
-import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp } from 'lucide-react'
+import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save } from 'lucide-react'
 
 export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   conversation: Conversation | null
@@ -11,6 +11,9 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
 }) {
   const [loading, setLoading] = useState(false)
   const [sheetData, setSheetData] = useState<any>(null)
+  const [notes, setNotes] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesSaved, setNotesSaved] = useState(false)
 
   useEffect(() => {
     if (!conversation) return
@@ -26,6 +29,31 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [conversation?.phone_number])
+
+  // Load existing notes when conversation changes
+  useEffect(() => {
+    if (!conversation) return
+    setNotes((conversation as any).notes || '')
+    setNotesSaved(false)
+  }, [conversation?.id])
+
+  const handleSaveNotes = async () => {
+    if (!conversation) return
+    setSavingNotes(true)
+    try {
+      await fetch(`/api/conversations/${conversation.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes })
+      })
+      setNotesSaved(true)
+      setTimeout(() => setNotesSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to save notes:', err)
+    } finally {
+      setSavingNotes(false)
+    }
+  }
 
   if (!conversation) {
     return (
@@ -97,6 +125,41 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
             <p className="text-xs text-gray-500">Data will appear once synced from Google Sheets</p>
           </div>
         )}
+
+        {/* Notes Section */}
+        <div className="p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center">
+                <StickyNote className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <p className="text-xs font-semibold text-gray-900 dark:text-white">Notes</p>
+            </div>
+            <button
+              onClick={handleSaveNotes}
+              disabled={savingNotes}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                notesSaved
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-emerald-100 hover:text-emerald-700'
+              }`}
+            >
+              {savingNotes ? (
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <Save className="w-3 h-3" />
+              )}
+              {notesSaved ? 'Saved!' : 'Save'}
+            </button>
+          </div>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Add notes about this lead..."
+            rows={4}
+            className="w-full text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 border border-gray-200 dark:border-gray-700"
+          />
+        </div>
       </div>
     </div>
   )
@@ -119,7 +182,6 @@ function InfoCard({ icon: Icon, label, value, badge, colored }: {
         </div>
         <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">{label}</p>
       </div>
-      
       {badge ? (
         <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-semibold ${
           colored
@@ -127,9 +189,7 @@ function InfoCard({ icon: Icon, label, value, badge, colored }: {
               ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
               : value.toLowerCase() === 'medium' || (parseInt(value) >= 50 && parseInt(value) < 80)
               ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
-              : value.toLowerCase() === 'low' || parseInt(value) < 50
-              ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-              : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
+              : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
             : value.toLowerCase() === 'yes'
             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
             : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
