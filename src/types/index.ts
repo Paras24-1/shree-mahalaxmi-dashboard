@@ -22,6 +22,8 @@ export type Stage =
   | 'followup'
   | 'not_interested'
   | 'call_done'
+  | 'low_budget'
+  | 'hot_customer'
 
 
 
