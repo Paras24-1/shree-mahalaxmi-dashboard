@@ -89,11 +89,16 @@ function DashboardContent() {
 
     const loadReminders = async () => {
       try {
-        // 1. Get conversations assigned to this user
-        const { data: convs } = await supabase
+        // 1. Get conversations (filter by assignment only if user is employee)
+        let query = supabase
           .from('conversations')
           .select('id, name, phone_number')
-          .eq('assigned_to', profile.id)
+
+        if (profile.role !== 'admin') {
+          query = query.eq('assigned_to', profile.id)
+        }
+
+        const { data: convs } = await query
 
         if (!convs || convs.length === 0) return
 
@@ -158,7 +163,7 @@ function DashboardContent() {
             .eq('id', newLead.conversation_id)
             .single()
 
-          if (!conv || conv.assigned_to !== profile?.id) {
+          if (!conv || (conv.assigned_to !== profile?.id && profile?.role !== 'admin')) {
             // Clear timer if unassigned or assigned to someone else
             if (activeTimersRef.current[newLead.id]) {
               clearTimeout(activeTimersRef.current[newLead.id])
@@ -201,7 +206,33 @@ function DashboardContent() {
     return () => {
       supabase.removeChannel(leadsChannel)
     }
-  }, [profile?.id])
+  }, [profile?.id, profile?.role])
+
+  // Local active lead reminder scheduler backup (triggers immediately on save in current browser)
+  useEffect(() => {
+    if (!lead || !lead.id || !lead.followup_date || lead.followup_notified) return
+
+    if (selected && (selected.assigned_to === profile?.id || profile?.role === 'admin')) {
+      const delay = new Date(lead.followup_date).getTime() - Date.now()
+      if (delay > 0) {
+        scheduleReminder(
+          lead.id,
+          lead.followup_date,
+          selected.name || selected.phone_number,
+          selected.phone_number,
+          selected.id
+        )
+      } else {
+        // If it was set in the past (e.g. current minute has passed), trigger immediately
+        triggerNotification(
+          lead.id,
+          selected.name || selected.phone_number,
+          selected.phone_number,
+          selected.id
+        )
+      }
+    }
+  }, [lead?.id, lead?.followup_date, lead?.followup_notified, selected?.assigned_to, selected?.id, profile?.id, profile?.role])
 
   // Cleanup timers on unmount
   useEffect(() => {
