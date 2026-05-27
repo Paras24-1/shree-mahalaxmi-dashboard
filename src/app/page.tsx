@@ -11,18 +11,29 @@ import { Conversation, Lead } from '@/types'
 import { MessageSquare, Moon, Sun, ArrowLeft, Info, Send, Users, LogOut, BarChart3, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
 type MobileView = 'list' | 'chat' | 'lead'
 
 export default function DashboardPage() {
   return (
     <ProtectedRoute>
-      <DashboardContent />
+      <Suspense fallback={
+        <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+          <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }>
+        <DashboardContent />
+      </Suspense>
     </ProtectedRoute>
   )
 }
 
 function DashboardContent() {
+  const searchParams = useSearchParams()
+  const conversationIdParam = searchParams?.get('conversation_id')
+
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [lead, setLead] = useState<Lead | null>(null)
   const [dark, setDark] = useState(false)
@@ -260,6 +271,28 @@ function DashboardContent() {
     }
   }
 
+  useEffect(() => {
+    if (!conversationIdParam) return
+
+    const selectConversationFromParam = async () => {
+      try {
+        const { data: conv, error } = await supabase
+          .from('conversations')
+          .select('*')
+          .eq('id', conversationIdParam)
+          .single()
+
+        if (conv && !error) {
+          handleSelect(conv)
+        }
+      } catch (err) {
+        console.error('Error selecting conversation from URL param:', err)
+      }
+    }
+
+    selectConversationFromParam()
+  }, [conversationIdParam])
+
   const handleLeadUpdate = (updates: Partial<Lead>) => {
     setLead((prev) => prev ? { ...prev, ...updates } : null)
   }
@@ -333,6 +366,13 @@ function DashboardContent() {
               </button>
             </>
           )}
+          <Link
+            href="/followups"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Followups</span>
+          </Link>
           <Link
             href="/bulk"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors"
