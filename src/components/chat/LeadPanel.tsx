@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Conversation, Lead, LeadActivity } from '@/types'
-import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save, Calendar, Clock, Trash2, X, Plus, Check } from 'lucide-react'
+import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save, Calendar, Clock, Trash2, X, Plus, Check, Edit2 } from 'lucide-react'
 
 export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   conversation: Conversation | null
@@ -29,6 +29,7 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   const [activityDesc, setActivityDesc] = useState('Followup via Call')
   const [activityNotes, setActivityNotes] = useState('')
   const [savingActivity, setSavingActivity] = useState(false)
+  const [editingActivity, setEditingActivity] = useState<LeadActivity | null>(null)
 
   const fetchActivities = async (leadId: string) => {
     setLoadingActivities(true)
@@ -77,6 +78,55 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
     } finally {
       setSavingActivity(false)
     }
+  }
+
+  const handleUpdateActivity = async () => {
+    if (!editingActivity || !activityDesc.trim() || !lead?.id) return
+    setSavingActivity(true)
+    try {
+      const res = await fetch('/api/lead-activities', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingActivity.id,
+          description: activityDesc.trim(),
+          notes: activityNotes.trim()
+        })
+      })
+      if (res.ok) {
+        await fetchActivities(lead.id)
+        setShowAddActivityModal(false)
+        setEditingActivity(null)
+        setActivityNotes('')
+        setActivityDesc('')
+      }
+    } catch (err) {
+      console.error('Failed to update activity:', err)
+    } finally {
+      setSavingActivity(false)
+    }
+  }
+
+  const handleDeleteActivity = async (id: string) => {
+    if (!lead?.id) return
+    if (!window.confirm('Are you sure you want to delete this activity?')) return
+    try {
+      const res = await fetch(`/api/lead-activities?id=${id}`, {
+        method: 'DELETE'
+      })
+      if (res.ok) {
+        await fetchActivities(lead.id)
+      }
+    } catch (err) {
+      console.error('Failed to delete activity:', err)
+    }
+  }
+
+  const closeActivityModal = () => {
+    setShowAddActivityModal(false)
+    setEditingActivity(null)
+    setActivityNotes('')
+    setActivityDesc('')
   }
 
   const handleMarkFollowupDone = async () => {
@@ -492,14 +542,38 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
               </div>
             ) : activities.length > 0 ? (
               activities.map((act) => (
-                <div key={act.id} className="relative">
+                <div key={act.id} className="relative group">
                   {/* Timeline Dot */}
                   <div className="absolute -left-[21.5px] top-1.5 w-2 h-2 rounded-full bg-emerald-500 border border-white dark:border-gray-900 shadow-sm" />
                   
                   <div className="flex flex-col space-y-0.5">
-                    <span className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider">
-                      {formatActivityDate(act.created_at)}
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider">
+                        {formatActivityDate(act.created_at)}
+                      </span>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            setEditingActivity(act)
+                            setActivityType(act.activity_type)
+                            setActivityDesc(act.description)
+                            setActivityNotes(act.notes || '')
+                            setShowAddActivityModal(true)
+                          }}
+                          className="p-0.5 rounded text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                          title="Edit Activity"
+                        >
+                          <Edit2 className="w-2.5 h-2.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteActivity(act.id)}
+                          className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                          title="Delete Activity"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    </div>
                     <p className="text-xs font-bold text-gray-800 dark:text-gray-200">
                       {act.description}
                     </p>
@@ -690,18 +764,18 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
       {/* Log Activity Modal */}
       {showAddActivityModal && (
         <div className="absolute inset-0 bg-black/40 z-20 transition-opacity duration-300">
-          <div className="absolute inset-0" onClick={() => setShowAddActivityModal(false)} />
+          <div className="absolute inset-0" onClick={closeActivityModal} />
           
           <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-950 rounded-t-3xl border-t border-gray-200 dark:border-gray-800 p-5 shadow-2xl max-h-[90%] overflow-y-auto z-30 transition-transform duration-300 transform translate-y-0 flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowAddActivityModal(false)}
+                  onClick={closeActivityModal}
                   className="p-1 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <X className="w-4 h-4" />
                 </button>
-                <h4 className="text-sm font-bold text-gray-900 dark:text-white">Log Activity</h4>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white">{editingActivity ? 'Edit Activity' : 'Log Activity'}</h4>
               </div>
             </div>
 
@@ -761,14 +835,14 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
             <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
               <button
                 type="button"
-                onClick={() => setShowAddActivityModal(false)}
+                onClick={closeActivityModal}
                 className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-900 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium text-xs transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleAddManualActivity}
+                onClick={editingActivity ? handleUpdateActivity : handleAddManualActivity}
                 disabled={savingActivity || !activityDesc.trim()}
                 className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white rounded-xl font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
               >

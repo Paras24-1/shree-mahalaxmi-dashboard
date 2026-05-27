@@ -56,3 +56,54 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error }, { status: 500 })
   }
 }
+
+// PATCH /api/lead-activities
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id, description, notes } = body
+
+    if (!id || !description) {
+      return NextResponse.json(
+        { error: 'id and description are required' },
+        { status: 400 }
+      )
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('lead_activities')
+      .update({ description, notes })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return NextResponse.json(data)
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error }, { status: 500 })
+  }
+}
+
+// DELETE /api/lead-activities?id=xxx
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    const { error } = await supabaseAdmin
+      .from('lead_activities')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    return NextResponse.json({ success: true })
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error }, { status: 500 })
+  }
+}
