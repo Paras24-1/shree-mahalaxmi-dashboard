@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Conversation, Lead } from '@/types'
-import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save, Calendar, Clock, Trash2, X } from 'lucide-react'
+import { Conversation, Lead, LeadActivity } from '@/types'
+import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save, Calendar, Clock, Trash2, X, Plus, Check } from 'lucide-react'
 
 export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   conversation: Conversation | null
@@ -21,6 +21,112 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   const [customDateVal, setCustomDateVal] = useState('')
   const [customTimeVal, setCustomTimeVal] = useState('')
   const [savingFollowup, setSavingFollowup] = useState(false)
+  const [activities, setActivities] = useState<LeadActivity[]>([])
+  const [loadingActivities, setLoadingActivities] = useState(false)
+  const [showAddActivityModal, setShowAddActivityModal] = useState(false)
+  const [showMarkDoneModal, setShowMarkDoneModal] = useState(false)
+  const [activityType, setActivityType] = useState('followup_call')
+  const [activityDesc, setActivityDesc] = useState('Followup via Call')
+  const [activityNotes, setActivityNotes] = useState('')
+  const [savingActivity, setSavingActivity] = useState(false)
+
+  const fetchActivities = async (leadId: string) => {
+    setLoadingActivities(true)
+    try {
+      const res = await fetch(`/api/lead-activities?lead_id=${leadId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setActivities(Array.isArray(data) ? data : [])
+      }
+    } catch (err) {
+      console.error('Failed to load activities:', err)
+    } finally {
+      setLoadingActivities(false)
+    }
+  }
+
+  useEffect(() => {
+    if (lead?.id) {
+      fetchActivities(lead.id)
+    } else {
+      setActivities([])
+    }
+  }, [lead?.id])
+
+  const handleAddManualActivity = async () => {
+    if (!lead?.id || !activityDesc.trim()) return
+    setSavingActivity(true)
+    try {
+      const res = await fetch('/api/lead-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lead_id: lead.id,
+          activity_type: activityType,
+          description: activityDesc.trim(),
+          notes: activityNotes.trim()
+        })
+      })
+      if (res.ok) {
+        await fetchActivities(lead.id)
+        setShowAddActivityModal(false)
+        setActivityNotes('')
+      }
+    } catch (err) {
+      console.error('Failed to save activity:', err)
+    } finally {
+      setSavingActivity(false)
+    }
+  }
+
+  const handleMarkFollowupDone = async () => {
+    if (!conversation || !lead?.id) return
+    setSavingActivity(true)
+    try {
+      await fetch('/api/lead-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lead_id: lead.id,
+          activity_type: activityType,
+          description: activityDesc.trim(),
+          notes: activityNotes.trim() || lead.followup_notes
+        })
+      })
+
+      await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          followup_date: null,
+          followup_notes: null,
+          followup_notified: false
+        })
+      })
+
+      onLeadUpdate({
+        followup_date: undefined,
+        followup_notes: undefined,
+        followup_notified: false
+      })
+      await fetchActivities(lead.id)
+      setShowMarkDoneModal(false)
+      setActivityNotes('')
+    } catch (err) {
+      console.error('Failed to complete follow-up:', err)
+    } finally {
+      setSavingActivity(false)
+    }
+  }
+
+  const formatActivityDate = (dateStr: string) => {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return ''
+    const datePart = d.toLocaleDateString('en-GB').replace(/\//g, '-') // DD-MM-YYYY
+    const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+    return `${datePart} at ${timePart}`
+  }
 
   // Load existing values when modal opens
   useEffect(() => {
@@ -321,13 +427,27 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
                   <p className="whitespace-pre-wrap">{lead.followup_notes}</p>
                 </div>
               )}
-              <button
-                onClick={handleClearFollowup}
-                className="flex items-center justify-center gap-1.5 w-full py-2 border border-dashed border-red-200 dark:border-red-950 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 rounded-xl text-xs font-medium transition-colors"
-              >
-                <Trash2 className="w-3 h-3" />
-                Cancel Reminder
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setActivityType('followup_call')
+                    setActivityDesc('Followup via Call')
+                    setActivityNotes(lead.followup_notes || '')
+                    setShowMarkDoneModal(true)
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  Mark Done
+                </button>
+                <button
+                  onClick={handleClearFollowup}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-dashed border-red-200 dark:border-red-950 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 rounded-xl text-xs font-medium transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Cancel
+                </button>
+              </div>
             </div>
           ) : (
             <div className="text-center py-4 bg-gray-50 dark:bg-gray-800/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
@@ -341,6 +461,62 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Timeline Section */}
+        <div className="p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <p className="text-xs font-semibold text-gray-900 dark:text-white">Timeline</p>
+            </div>
+            <button
+              onClick={() => {
+                setActivityType('manual')
+                setActivityDesc('')
+                setActivityNotes('')
+                setShowAddActivityModal(true)
+              }}
+              className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+            >
+              <Plus className="w-3 h-3" /> Add
+            </button>
+          </div>
+
+          <div className="relative pl-4 border-l border-gray-100 dark:border-gray-800 space-y-4 ml-2 py-1">
+            {loadingActivities ? (
+              <div className="flex justify-center py-4">
+                <RefreshCw className="w-4 h-4 text-emerald-500 animate-spin" />
+              </div>
+            ) : activities.length > 0 ? (
+              activities.map((act) => (
+                <div key={act.id} className="relative">
+                  {/* Timeline Dot */}
+                  <div className="absolute -left-[21.5px] top-1.5 w-2 h-2 rounded-full bg-emerald-500 border border-white dark:border-gray-900 shadow-sm" />
+                  
+                  <div className="flex flex-col space-y-0.5">
+                    <span className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider">
+                      {formatActivityDate(act.created_at)}
+                    </span>
+                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                      {act.description}
+                    </p>
+                    {act.notes && (
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-normal bg-gray-50 dark:bg-gray-800/40 p-2 rounded-lg mt-1 border border-gray-100 dark:border-gray-800/30 whitespace-pre-wrap">
+                        {act.notes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-2 text-xs text-gray-400 border border-dashed border-gray-100 dark:border-gray-800 rounded-xl">
+                No activities logged yet
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Notes Section */}
@@ -506,6 +682,190 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
                   <Save className="w-3.5 h-3.5" />
                 )}
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Log Activity Modal */}
+      {showAddActivityModal && (
+        <div className="absolute inset-0 bg-black/40 z-20 transition-opacity duration-300">
+          <div className="absolute inset-0" onClick={() => setShowAddActivityModal(false)} />
+          
+          <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-950 rounded-t-3xl border-t border-gray-200 dark:border-gray-800 p-5 shadow-2xl max-h-[90%] overflow-y-auto z-30 transition-transform duration-300 transform translate-y-0 flex flex-col space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddActivityModal(false)}
+                  className="p-1 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white">Log Activity</h4>
+              </div>
+            </div>
+
+            {/* Selector Grid */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { type: 'followup_call', label: 'Call', desc: 'Followup via Call' },
+                { type: 'followup_whatsapp', label: 'WhatsApp', desc: 'Followup via WhatsApp' },
+                { type: 'manual', label: 'Other', desc: 'Manual Note' }
+              ].map((item) => {
+                const isSelected = activityType === item.type
+                return (
+                  <button
+                    key={item.type}
+                    type="button"
+                    onClick={() => {
+                      setActivityType(item.type)
+                      setActivityDesc(item.desc)
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold text-center transition-all ${
+                      isSelected
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-500 dark:text-emerald-400 font-medium'
+                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800/80'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Custom Description Input */}
+            <div className="flex flex-col space-y-1">
+              <label className="block text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Description</label>
+              <input
+                type="text"
+                value={activityDesc}
+                onChange={(e) => setActivityDesc(e.target.value)}
+                placeholder="e.g. Followup via Call"
+                className="w-full text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* Notes Textarea */}
+            <div className="flex flex-col space-y-1">
+              <label className="block text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Notes</label>
+              <textarea
+                value={activityNotes}
+                onChange={(e) => setActivityNotes(e.target.value)}
+                placeholder="Enter notes/summary of the activity..."
+                rows={3}
+                className="w-full text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded-xl p-3 border border-gray-200 dark:border-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setShowAddActivityModal(false)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-900 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddManualActivity}
+                disabled={savingActivity || !activityDesc.trim()}
+                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white rounded-xl font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
+              >
+                {savingActivity ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Followup Modal */}
+      {showMarkDoneModal && (
+        <div className="absolute inset-0 bg-black/40 z-20 transition-opacity duration-300">
+          <div className="absolute inset-0" onClick={() => setShowMarkDoneModal(false)} />
+          
+          <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-950 rounded-t-3xl border-t border-gray-200 dark:border-gray-800 p-5 shadow-2xl max-h-[90%] overflow-y-auto z-30 transition-transform duration-300 transform translate-y-0 flex flex-col space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowMarkDoneModal(false)}
+                  className="p-1 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white">Complete Followup</h4>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 leading-normal">
+              Marking this reminder as done will log it to the lead timeline and clear the active alert.
+            </p>
+
+            {/* Selector Grid */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { type: 'followup_call', label: 'Followup via Call', desc: 'Followup via Call' },
+                { type: 'followup_whatsapp', label: 'Followup via WhatsApp', desc: 'Followup via WhatsApp' }
+              ].map((item) => {
+                const isSelected = activityType === item.type
+                return (
+                  <button
+                    key={item.type}
+                    type="button"
+                    onClick={() => {
+                      setActivityType(item.type)
+                      setActivityDesc(item.desc)
+                    }}
+                    className={`p-3 rounded-2xl border text-xs font-semibold text-center transition-all ${
+                      isSelected
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-500 dark:text-emerald-400 font-medium'
+                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800/80'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Custom Notes Textarea */}
+            <div className="flex flex-col space-y-1">
+              <label className="block text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Followup Summary / Notes</label>
+              <textarea
+                value={activityNotes}
+                onChange={(e) => setActivityNotes(e.target.value)}
+                placeholder="Describe how the follow-up went..."
+                rows={3}
+                className="w-full text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded-xl p-3 border border-gray-200 dark:border-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setShowMarkDoneModal(false)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-900 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleMarkFollowupDone}
+                disabled={savingActivity}
+                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white rounded-xl font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
+              >
+                {savingActivity ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                Confirm Done
               </button>
             </div>
           </div>

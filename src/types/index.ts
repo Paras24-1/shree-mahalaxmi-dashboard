@@ -71,6 +71,16 @@ export interface Lead {
   followup_notes?: string
   followup_notified?: boolean
 }
+
+export interface LeadActivity {
+  id: string
+  lead_id: string
+  activity_type: string
+  description: string
+  notes?: string
+  created_at: string
+}
+
 // n8n / Webhook payload
 export interface WebhookPayload {
   phone_number: string
