@@ -67,6 +67,9 @@ export interface Lead {
   callback_ready?: string
   conversation_summary?: string
   lead_score?: string  // ← ADD THIS
+  followup_date?: string
+  followup_notes?: string
+  followup_notified?: boolean
 }
 // n8n / Webhook payload
 export interface WebhookPayload {
