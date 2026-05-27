@@ -211,8 +211,9 @@ function DashboardContent() {
   // Local active lead reminder scheduler backup (triggers immediately on save in current browser)
   useEffect(() => {
     if (!lead || !lead.id || !lead.followup_date || lead.followup_notified) return
+    if (!selected || lead.conversation_id !== selected.id) return
 
-    if (selected && (selected.assigned_to === profile?.id || profile?.role === 'admin')) {
+    if (selected.assigned_to === profile?.id || profile?.role === 'admin') {
       const delay = new Date(lead.followup_date).getTime() - Date.now()
       if (delay > 0) {
         scheduleReminder(
