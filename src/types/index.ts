@@ -24,6 +24,7 @@ export type Stage =
   | 'call_done'
   | 'low_budget'
   | 'hot_customer'
+  | 'not_connected'
 
 
 
