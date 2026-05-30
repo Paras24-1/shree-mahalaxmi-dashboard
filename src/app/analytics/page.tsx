@@ -55,10 +55,29 @@ function AnalyticsContent() {
   const fetchStats = async () => {
     setLoading(true)
     try {
-      // Get all conversations
-      const { data: conversations } = await supabase
-        .from('conversations')
-        .select('*')
+      // Get all conversations (paginated to bypass Supabase 1000 limit)
+      let conversations: any[] = []
+      let pageConv = 0
+      const pageSize = 1000
+      let hasMoreConv = true
+
+      while (hasMoreConv) {
+        const { data, error } = await supabase
+          .from('conversations')
+          .select('*')
+          .range(pageConv * pageSize, (pageConv + 1) * pageSize - 1)
+
+        if (error) throw error
+        if (data && data.length > 0) {
+          conversations = [...conversations, ...data]
+          pageConv++
+          if (data.length < pageSize) {
+            hasMoreConv = false
+          }
+        } else {
+          hasMoreConv = false
+        }
+      }
 
       // Get all employees
       const { data: employees } = await supabase
@@ -66,10 +85,28 @@ function AnalyticsContent() {
         .select('id, name, email')
         .eq('role', 'employee')
 
-      // Get assignments
-      const { data: assignments } = await supabase
-        .from('conversation_assignments')
-        .select('*')
+      // Get assignments (paginated to bypass Supabase 1000 limit)
+      let assignments: any[] = []
+      let pageAssign = 0
+      let hasMoreAssign = true
+
+      while (hasMoreAssign) {
+        const { data, error } = await supabase
+          .from('conversation_assignments')
+          .select('*')
+          .range(pageAssign * pageSize, (pageAssign + 1) * pageSize - 1)
+
+        if (error) throw error
+        if (data && data.length > 0) {
+          assignments = [...assignments, ...data]
+          pageAssign++
+          if (data.length < pageSize) {
+            hasMoreAssign = false
+          }
+        } else {
+          hasMoreAssign = false
+        }
+      }
 
       if (conversations && employees) {
         const employeeStats: EmployeeStats[] = employees.map(emp => {
@@ -88,13 +125,13 @@ function AnalyticsContent() {
           }
         })
         const stageCounts = {
-  new: conversations.filter(c => (c.stage || 'new') === 'new').length,
-  interested: conversations.filter(c => c.stage === 'interested').length,
-  booking: conversations.filter(c => c.stage === 'booking').length,
-  confirmed: conversations.filter(c => c.stage === 'confirmed').length,
-  completed: conversations.filter(c => c.stage === 'completed').length,
-  cancelled: conversations.filter(c => c.stage === 'cancelled').length,
-}
+          new: conversations.filter(c => (c.stage || 'new') === 'new').length,
+          interested: conversations.filter(c => c.stage === 'interested').length,
+          booking: conversations.filter(c => c.stage === 'booking').length,
+          confirmed: conversations.filter(c => c.stage === 'confirmed').length,
+          completed: conversations.filter(c => c.stage === 'completed').length,
+          cancelled: conversations.filter(c => c.stage === 'cancelled').length,
+        }
 
         setStats({
           stage_counts: stageCounts,

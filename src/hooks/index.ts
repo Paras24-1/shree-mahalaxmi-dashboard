@@ -11,7 +11,7 @@ export function useConversations(filters: {
   search?: string
   stage?: string
   unread?: boolean
-  assignFilter?: 'all' | 'unassigned' | 'assigned'
+  assignFilter?: string
   userId?: string
   isAdmin?: boolean
   userRole?: string
@@ -36,7 +36,12 @@ export function useConversations(filters: {
       filters.assignFilter &&
       filters.assignFilter !== 'all'
     ) {
-      params.set('assign_filter', filters.assignFilter)
+      if (filters.assignFilter === 'unassigned' || filters.assignFilter === 'assigned') {
+        params.set('assign_filter', filters.assignFilter)
+      } else {
+        // Specific employee ID selected
+        params.set('assigned_to', filters.assignFilter)
+      }
     }
 
     const res = await fetch(`/api/conversations?${params}`)

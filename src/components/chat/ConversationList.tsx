@@ -41,7 +41,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [search, setSearch] = useState('')
   const [stage, setStage] = useState('')
   const [unread, setUnread] = useState(false)
-  const [assignedFilter, setAssignedFilter] = useState<'all' | 'unassigned' | 'assigned'>('all') // all, unassigned, assigned, mine
+  const [assignedFilter, setAssignedFilter] = useState<string>('all') // all, unassigned, assigned, or employee_id
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -169,14 +169,17 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
           {isAdmin && (
             <select
               value={assignedFilter}
-              onChange={(e) =>
-  setAssignedFilter(e.target.value as 'all' | 'unassigned' | 'assigned')
-}
+              onChange={(e) => setAssignedFilter(e.target.value)}
               className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
             >
               <option value="all">All chats</option>
               <option value="unassigned">Unassigned</option>
-              <option value="assigned">Assigned</option>
+              <option value="assigned">All Assigned</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name}
+                </option>
+              ))}
             </select>
           )}
           
