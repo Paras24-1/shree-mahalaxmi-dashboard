@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(req: NextRequest) {
   try {
@@ -6,51 +7,41 @@ export async function GET(req: NextRequest) {
     const rawPhone = searchParams.get('phone') || ''
     const phone = rawPhone.replace(/\D/g, '').slice(-10)
 
-    const apiKey    = process.env.GOOGLE_SHEETS_API_KEY
-    const sheetId   = process.env.GOOGLE_SHEET_ID
-    const sheetName = process.env.GOOGLE_SHEET_NAME || 'LEADS'
-
-    if (!apiKey || !sheetId) {
-      return NextResponse.json({ error: 'Missing config' }, { status: 500 })
+    if (!phone) {
+      return NextResponse.json({ error: 'phone is required' }, { status: 400 })
     }
 
-    const range = `${encodeURIComponent(sheetName)}!A:Z`
-    const url   = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`
+    // Query leads table matching the last 10 digits of phone_number
+    const { data, error } = await supabaseAdmin
+      .from('leads')
+      .select('*')
+      .ilike('phone_number', `%${phone}`)
+      .maybeSingle()
 
-    const res  = await fetch(url)
-    const data = await res.json()
-
-    if (data.error) {
-      return NextResponse.json({ error: data.error.message }, { status: 500 })
-    }
-
-    if (!data.values || data.values.length < 2) {
-      return NextResponse.json({ error: 'No data in sheet' }, { status: 404 })
-    }
-
-    const headers: string[] = data.values[0]
-    const rows: string[][]  = data.values.slice(1)
-
-    const phoneIndex = headers.findIndex(
-      (h) => h.toLowerCase().includes('phone')
-    )
-
-    const matchedRow = rows.find((row) => {
-      const rowPhone = (row[phoneIndex] || '').replace(/\D/g, '').slice(-10)
-      return rowPhone === phone
-    })
-
-    if (!matchedRow) {
+    if (error) throw error
+    if (!data) {
       return NextResponse.json({ error: 'No matching lead found' }, { status: 404 })
     }
 
-    const lead: Record<string, string> = {}
-    headers.forEach((header, i) => {
-      lead[header] = matchedRow[i] || ''
-    })
+    // Map database column names to match the exact keys expected by LeadPanel.tsx (which mapped from Google Sheets)
+    const lead = {
+      Phone: data.phone_number,
+      Name: data.name || '',
+      Lead_Type: data.lead_type || '',
+      city: data.city || '',
+      machine_interest: data.machine_interest || '',
+      lead_quality: data.lead_quality || '',
+      lead_score: String(data.lead_score || 0),
+      callback_ready: data.callback_ready || '',
+      conversation_summary: data.conversation_summary || '',
+      followup_date: data.followup_date || null,
+      followup_notes: data.followup_notes || null,
+      followup_notified: data.followup_notified || false,
+      stage: data.stage || 'new',
+      ...(data.metadata || {}) // Dynamically unpack all custom columns (e.g. Tehsil, Crop_Requirement)
+    }
 
     return NextResponse.json(lead)
-
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

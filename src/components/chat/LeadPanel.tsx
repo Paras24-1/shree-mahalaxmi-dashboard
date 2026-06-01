@@ -427,6 +427,28 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
             <InfoCard icon={TrendingUp} label="Lead Score" value={data.lead_score} badge colored />
             <InfoCard icon={CheckCircle} label="Callback Ready" value={data.callback_ready} badge />
 
+            {/* Dynamically render all other client-specific custom columns */}
+            {Object.entries(data).map(([key, value]) => {
+              const standardKeys = [
+                'Phone', 'Name', 'Lead_Type', 'city', 'machine_interest', 
+                'lead_quality', 'lead_score', 'callback_ready', 'conversation_summary', 
+                'followup_date', 'followup_notes', 'followup_notified', 'id', 'conversation_id', 'stage'
+              ]
+              if (standardKeys.includes(key) || !value) return null
+              
+              // Format label: e.g. "crop_requirement" -> "Crop Requirement"
+              const formattedLabel = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+              
+              return (
+                <InfoCard 
+                  key={key} 
+                  icon={Target} 
+                  label={formattedLabel} 
+                  value={String(value)} 
+                />
+              )
+            })}
+
             {data.conversation_summary && (
               <div className="mt-5 p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
