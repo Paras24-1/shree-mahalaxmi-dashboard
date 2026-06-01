@@ -332,7 +332,12 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
       .then((data) => {
         if (data && !data.error) {
           setSheetData(data)
-          onLeadUpdate(data)
+          const { 
+            notes, Notes, stage, Stage, 
+            followup_date, followup_notes, followup_notified,
+            ...cleanedData 
+          } = data
+          onLeadUpdate(cleanedData)
         }
       })
       .catch(() => {})
