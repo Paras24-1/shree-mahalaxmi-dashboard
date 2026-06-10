@@ -37,7 +37,9 @@ export async function POST(req: NextRequest) {
       direction,
       name,
       media_url,
-      media_type
+      media_type,
+      callback_ready,
+      lead_quality
     } = body
 
     if (!phone_number || !direction) {
@@ -78,6 +80,7 @@ export async function POST(req: NextRequest) {
           phone_number,
           name: contactName,
           last_message: msgText,
+          ...(callback_ready === 'yes' ? { stage: 'interested' } : {}),
           ...(direction === 'incoming'
             ? { updated_at: new Date().toISOString() }
             : {}),
@@ -113,7 +116,13 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin
       .from('leads')
       .upsert(
-        { conversation_id: conversation.id, phone_number, name: contactName },
+        { 
+          conversation_id: conversation.id, 
+          phone_number, 
+          name: contactName,
+          ...(callback_ready === 'yes' ? { stage: 'interested' } : {}),
+          ...(lead_quality ? { lead_quality } : {})
+        },
         { onConflict: 'conversation_id' }
       )
 
