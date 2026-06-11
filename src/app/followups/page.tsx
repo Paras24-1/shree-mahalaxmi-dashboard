@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { 
   X, Search, Calendar, Clock, Trash2, Check, Edit2, 
-  MessageSquare, ArrowLeft, Sun, Moon, RefreshCw, AlertCircle 
+  MessageSquare, ArrowLeft, Sun, Moon, RefreshCw, AlertCircle, Mic
 } from 'lucide-react'
 
 interface FollowupReminder {
@@ -413,6 +413,15 @@ function FollowupsContent() {
           <span className="font-semibold text-sm">Followups Control Panel</span>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="https://voice-aura-sandy.vercel.app/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-200"
+          >
+            <Mic className="w-3.5 h-3.5 animate-pulse" />
+            <span className="hidden sm:inline">Voice Agent</span>
+          </a>
           <button
             onClick={() => setDark(d => !d)}
             className="p-1.5 rounded-lg text-emerald-100 hover:bg-emerald-700 transition-colors"

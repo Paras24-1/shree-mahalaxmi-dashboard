@@ -8,7 +8,7 @@ import ChatWindow from '@/components/chat/ChatWindow'
 import LeadPanel from '@/components/chat/LeadPanel'
 import AdminPanel from '@/components/admin/AdminPanel'
 import { Conversation, Lead } from '@/types'
-import { MessageSquare, Moon, Sun, ArrowLeft, Info, Send, Users, LogOut, BarChart3, Calendar } from 'lucide-react'
+import { MessageSquare, Moon, Sun, ArrowLeft, Info, Send, Users, LogOut, BarChart3, Calendar, Mic } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSearchParams } from 'next/navigation'
@@ -380,6 +380,15 @@ function DashboardContent() {
             <Send className="w-3.5 h-3.5" />
             <span className="hidden md:block">Bulk Message</span>
           </Link>
+          <a
+            href="https://voice-aura-sandy.vercel.app/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-200"
+          >
+            <Mic className="w-3.5 h-3.5 animate-pulse" />
+            <span className="hidden sm:inline">Voice Agent</span>
+          </a>
           <button
             onClick={() => setDark((d) => !d)}
             className="p-1.5 rounded-lg text-emerald-100 hover:bg-emerald-700 transition-colors"
