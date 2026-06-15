@@ -14,7 +14,7 @@ export interface User {
 
 export type Stage =
   | 'new'
-  | 'interested'
+  | 'callback_done_by_ai'
   | 'booking'
   | 'confirmed'
   | 'cancelled'

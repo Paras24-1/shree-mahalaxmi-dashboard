@@ -17,10 +17,10 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
 
-  const STAGES = ['new', 'interested', 'booking', 'confirmed', 'cancelled', 'completed', 'followup', 'not_interested', 'call_done', 'low_budget', 'hot_customer', 'not_connected'] as const
+  const STAGES = ['new', 'callback_done_by_ai', 'booking', 'confirmed', 'cancelled', 'completed', 'followup', 'not_interested', 'call_done', 'low_budget', 'hot_customer', 'not_connected'] as const
   const STAGE_COLORS: Record<string, string> = {
     new:        'bg-gray-100 text-gray-600',
-    interested: 'bg-blue-100 text-blue-700',
+    callback_done_by_ai: 'bg-blue-100 text-blue-700',
     booking:    'bg-amber-100 text-amber-700',
     confirmed:  'bg-green-100 text-green-700',
     cancelled:  'bg-red-100 text-red-600',

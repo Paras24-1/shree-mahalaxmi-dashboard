@@ -20,7 +20,7 @@ interface EmployeeStats {
 interface Stats {
   stage_counts: {
   new: number
-  interested: number
+  callback_done_by_ai: number
   booking: number
   confirmed: number
   completed: number
@@ -126,7 +126,7 @@ function AnalyticsContent() {
         })
         const stageCounts = {
           new: conversations.filter(c => (c.stage || 'new') === 'new').length,
-          interested: conversations.filter(c => c.stage === 'interested').length,
+          callback_done_by_ai: conversations.filter(c => c.stage === 'callback_done_by_ai').length,
           booking: conversations.filter(c => c.stage === 'booking').length,
           confirmed: conversations.filter(c => c.stage === 'confirmed').length,
           completed: conversations.filter(c => c.stage === 'completed').length,
@@ -233,7 +233,7 @@ function AnalyticsContent() {
            {/* Lead Stages */}
 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
   <StageCard label="New" value={stats.stage_counts.new} color="gray" />
-  <StageCard label="Interested" value={stats.stage_counts.interested} color="blue" />
+  <StageCard label="Callback Done by AI" value={stats.stage_counts.callback_done_by_ai} color="blue" />
   <StageCard label="Booking" value={stats.stage_counts.booking} color="amber" />
   <StageCard label="Confirmed" value={stats.stage_counts.confirmed} color="green" />
   <StageCard label="Completed" value={stats.stage_counts.completed} color="purple" />

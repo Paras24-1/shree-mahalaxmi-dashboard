@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
           phone_number,
           name: contactName,
           last_message: msgText,
-          ...(callback_ready === 'yes' ? { stage: 'interested' } : {}),
+          ...(callback_ready === 'yes' ? { stage: 'callback_done_by_ai' } : {}),
           ...(direction === 'incoming'
             ? { updated_at: new Date().toISOString() }
             : {}),
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
           conversation_id: conversation.id, 
           phone_number, 
           name: contactName,
-          ...(callback_ready === 'yes' ? { stage: 'interested' } : {}),
+          ...(callback_ready === 'yes' ? { stage: 'callback_done_by_ai' } : {}),
           ...(lead_quality ? { lead_quality } : {})
         },
         { onConflict: 'conversation_id' }

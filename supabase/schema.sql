@@ -143,7 +143,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE leads;
 /*
 INSERT INTO conversations (phone_number, name, last_message, stage, ai_mode)
 VALUES 
-  ('+919876543210', 'Rahul Sharma', 'What is the price of the deluxe room?', 'interested', true),
+  ('+919876543210', 'Rahul Sharma', 'What is the price of the deluxe room?', 'callback_done_by_ai', true),
   ('+919812345678', 'Priya Patel',  'I want to book for 2 nights',           'booking',    false),
   ('+919898989898', 'Amit Singh',   'Thank you for the confirmation!',        'confirmed',  true);
 
