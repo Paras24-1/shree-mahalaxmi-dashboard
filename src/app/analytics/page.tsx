@@ -21,6 +21,7 @@ interface Stats {
   stage_counts: {
   new: number
   callback_done_by_ai: number
+  interested: number
   booking: number
   confirmed: number
   completed: number
@@ -127,6 +128,7 @@ function AnalyticsContent() {
         const stageCounts = {
           new: conversations.filter(c => (c.stage || 'new') === 'new').length,
           callback_done_by_ai: conversations.filter(c => c.stage === 'callback_done_by_ai').length,
+          interested: conversations.filter(c => c.stage === 'interested').length,
           booking: conversations.filter(c => c.stage === 'booking').length,
           confirmed: conversations.filter(c => c.stage === 'confirmed').length,
           completed: conversations.filter(c => c.stage === 'completed').length,
@@ -231,9 +233,10 @@ function AnalyticsContent() {
         </div>
 
            {/* Lead Stages */}
-<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
   <StageCard label="New" value={stats.stage_counts.new} color="gray" />
   <StageCard label="Callback Done by AI" value={stats.stage_counts.callback_done_by_ai} color="blue" />
+  <StageCard label="Interested" value={stats.stage_counts.interested} color="indigo" />
   <StageCard label="Booking" value={stats.stage_counts.booking} color="amber" />
   <StageCard label="Confirmed" value={stats.stage_counts.confirmed} color="green" />
   <StageCard label="Completed" value={stats.stage_counts.completed} color="purple" />
@@ -402,6 +405,7 @@ function StageCard({ label, value, color }: {
   const colorClasses = {
     gray: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
     blue: 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400',
+    indigo: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400',
     amber: 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400',
     green: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400',
     purple: 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-400',
