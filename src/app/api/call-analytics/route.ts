@@ -149,10 +149,14 @@ export async function GET(request: Request) {
           direction = 'outgoing'
         }
 
-        if (!customerPhone) continue
-
-        const last10 = customerPhone.slice(-10)
-        const assignedTo = phoneToEmployeeMap.get(last10) || unassignedKey
+        // Determine which bucket this call belongs to (by CRM assignment or unassigned)
+        const last10 = customerPhone ? customerPhone.slice(-10) : ''
+        
+        // Look up CRM assignment if we have a phone number
+        let assignedTo: string = unassignedKey
+        if (last10) {
+          assignedTo = phoneToEmployeeMap.get(last10) || unassignedKey
+        }
 
         const stats = employeeStatsMap.get(assignedTo)
         if (stats) {
@@ -179,15 +183,18 @@ export async function GET(request: Request) {
             }
           }
 
-          callLogsList.push({
-            id: log.id,
-            customerPhone: last10,
-            direction,
-            status: log.status,
-            isPicked: !isMissed,
-            assignedTo,
-            createdAt: log.created_at
-          })
+          // Only add to callLogsList if we have a real customer phone (for lead matching in frontend)
+          if (last10) {
+            callLogsList.push({
+              id: log.id,
+              customerPhone: last10,
+              direction,
+              status: log.status,
+              isPicked: !isMissed,
+              assignedTo,
+              createdAt: log.created_at
+            })
+          }
         }
       }
     }
