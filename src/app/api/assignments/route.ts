@@ -59,3 +59,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+export async function GET() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('conversation_assignments')
+      .select('*')
+
+    if (error) throw error
+    return NextResponse.json(data || [])
+  } catch (err) {
+    console.error('[assignments GET]', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+

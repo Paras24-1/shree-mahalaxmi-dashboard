@@ -139,58 +139,23 @@ function AnalyticsContent() {
   const fetchStats = async () => {
     setLoading(true)
     try {
-      // Get all conversations (paginated to bypass Supabase 1000 limit)
-      let conversations: any[] = []
-      let pageConv = 0
-      const pageSize = 1000
-      let hasMoreConv = true
+      // 1. Fetch conversations from the service role API route
+      const convsRes = await fetch('/api/conversations')
+      if (!convsRes.ok) throw new Error('Failed to fetch conversations')
+      const conversations = await convsRes.json()
 
-      while (hasMoreConv) {
-        const { data, error } = await supabase
-          .from('conversations')
-          .select('*')
-          .range(pageConv * pageSize, (pageConv + 1) * pageSize - 1)
+      // 2. Fetch users from the service role API route and filter to get employees
+      const usersRes = await fetch('/api/users')
+      if (!usersRes.ok) throw new Error('Failed to fetch users')
+      const allUsers = await usersRes.json()
+      const employees = Array.isArray(allUsers) 
+        ? allUsers.filter((u: any) => u.role === 'employee') 
+        : []
 
-        if (error) throw error
-        if (data && data.length > 0) {
-          conversations = [...conversations, ...data]
-          pageConv++
-          if (data.length < pageSize) {
-            hasMoreConv = false
-          }
-        } else {
-          hasMoreConv = false
-        }
-      }
-
-      // Get all employees
-      const { data: employees } = await supabase
-        .from('users')
-        .select('id, name, email')
-        .eq('role', 'employee')
-
-      // Get assignments (paginated to bypass Supabase 1000 limit)
-      let assignments: any[] = []
-      let pageAssign = 0
-      let hasMoreAssign = true
-
-      while (hasMoreAssign) {
-        const { data, error } = await supabase
-          .from('conversation_assignments')
-          .select('*')
-          .range(pageAssign * pageSize, (pageAssign + 1) * pageSize - 1)
-
-        if (error) throw error
-        if (data && data.length > 0) {
-          assignments = [...assignments, ...data]
-          pageAssign++
-          if (data.length < pageSize) {
-            hasMoreAssign = false
-          }
-        } else {
-          hasMoreAssign = false
-        }
-      }
+      // 3. Fetch assignments from the service role API route
+      const assignRes = await fetch('/api/assignments')
+      if (!assignRes.ok) throw new Error('Failed to fetch assignments')
+      const assignments = await assignRes.json()
 
       if (conversations && employees) {
         setAllConversations(conversations)
