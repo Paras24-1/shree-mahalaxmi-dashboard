@@ -313,45 +313,26 @@ function AnalyticsContent() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Employee Filter Selector */}
-            <select
-              value={selectedEmployeeId}
-              onChange={(e) => setSelectedEmployeeId(e.target.value)}
-              className="block w-full max-w-[200px] px-3.5 py-1.5 text-xs font-semibold text-gray-705 bg-gray-50 border border-gray-250 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm"
-            >
-              <option value="all">All Team (Overall)</option>
-              {allEmployees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  Team - {emp.name}
-                </option>
-              ))}
-              {callAnalytics?.employees?.some((e: any) => e.id === 'unassigned') && (
-                <option value="unassigned">Unassigned Leads</option>
-              )}
-            </select>
-
-            {/* Time Range Selector */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
-              {[
-                { id: 'today', label: 'Today' },
-                { id: 'weekly', label: 'Weekly (7d)' },
-                { id: 'monthly', label: 'Monthly (30d)' },
-                { id: 'all', label: 'All Time' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setTimeRange(tab.id as any)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    timeRange === tab.id
-                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+          {/* Time Range Selector */}
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+            {[
+              { id: 'today', label: 'Today' },
+              { id: 'weekly', label: 'Weekly (7d)' },
+              { id: 'monthly', label: 'Monthly (30d)' },
+              { id: 'all', label: 'All Time' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setTimeRange(tab.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  timeRange === tab.id
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
       </header>
@@ -409,12 +390,31 @@ function AnalyticsContent() {
 
         {/* Voice AI Call Analytics Section */}
         <div className="border-t border-gray-250 dark:border-gray-850 pt-6 space-y-4">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Phone className="w-5 h-5 text-violet-500" />
-              Voice AI Call Activity
-            </h2>
-            <p className="text-xs text-gray-500">Call outcomes and performance for the selected time range</p>
+          <div className="flex justify-between items-center flex-wrap gap-4">
+            <div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Phone className="w-5 h-5 text-violet-500" />
+                Voice AI Call Activity
+              </h2>
+              <p className="text-xs text-gray-500">Call outcomes and performance for the selected time range</p>
+            </div>
+
+            {/* Employee Filter Selector */}
+            <select
+              value={selectedEmployeeId}
+              onChange={(e) => setSelectedEmployeeId(e.target.value)}
+              className="block w-full max-w-[200px] px-3.5 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-250 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm"
+            >
+              <option value="all">All Team (Overall)</option>
+              {allEmployees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  Team - {emp.name}
+                </option>
+              ))}
+              {callAnalytics?.employees?.some((e: any) => e.id === 'unassigned') && (
+                <option value="unassigned">Unassigned Leads</option>
+              )}
+            </select>
           </div>
 
           {loadingCalls ? (
