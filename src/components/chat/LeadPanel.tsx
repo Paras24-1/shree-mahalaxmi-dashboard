@@ -15,6 +15,11 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
   const [showFollowupModal, setShowFollowupModal] = useState(false)
+
+  // Call Transcripts state
+  const [callLogs, setCallLogs] = useState<any[]>([])
+  const [loadingCalls, setLoadingCalls] = useState(false)
+  const [expandedCallId, setExpandedCallId] = useState<string | null>(null)
   const [modalDate, setModalDate] = useState<Date | null>(null)
   const [modalNotes, setModalNotes] = useState('')
   const [customMode, setCustomMode] = useState(false)
@@ -344,6 +349,20 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
       .finally(() => setLoading(false))
   }, [conversation?.phone_number])
 
+  // Fetch Voice AI call transcripts matching this lead's phone number
+  useEffect(() => {
+    if (!conversation?.phone_number) {
+      setCallLogs([])
+      return
+    }
+    setLoadingCalls(true)
+    fetch(`/api/call-transcripts?phone=${encodeURIComponent(conversation.phone_number)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setCallLogs(data))
+      .catch((err) => console.error('[LeadPanel] Failed to fetch call logs:', err))
+      .finally(() => setLoadingCalls(false))
+  }, [conversation?.phone_number])
+
   // Load existing notes when conversation changes
   useEffect(() => {
     if (!conversation) return
@@ -653,6 +672,63 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
             rows={4}
             className="w-full text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400 border border-gray-200 dark:border-gray-700"
           />
+        </div>
+
+        {/* Voice AI Call Transcripts Section */}
+        <div className="p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-950/50 flex items-center justify-center">
+              <Phone className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <p className="text-xs font-semibold text-gray-900 dark:text-white">Voice AI Call Transcripts</p>
+          </div>
+
+          <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+            {loadingCalls ? (
+              <div className="text-center py-4 text-xs text-gray-400 flex items-center justify-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-violet-500 animate-spin" />
+                <span>Loading call logs...</span>
+              </div>
+            ) : callLogs.length > 0 ? (
+              callLogs.map((log) => {
+                const isExpanded = expandedCallId === log.id;
+                const minutes = Math.floor(log.duration_seconds / 60);
+                const seconds = log.duration_seconds % 60;
+                
+                return (
+                  <div key={log.id} className="border border-gray-100 dark:border-gray-800/85 rounded-xl p-3 bg-gray-50/50 dark:bg-gray-800/20 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase">
+                          {new Date(log.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        <p className="text-xs text-gray-700 dark:text-gray-300 font-medium mt-0.5">
+                          Duration: {minutes}m {seconds}s | Status: <span className="capitalize text-emerald-600 dark:text-emerald-400">{log.status}</span>
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCallId(isExpanded ? null : log.id)}
+                        className="text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline"
+                      >
+                        {isExpanded ? 'Hide' : 'Transcript'}
+                      </button>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-950 p-2.5 rounded-lg border border-gray-150 dark:border-gray-800 max-h-[220px] overflow-y-auto whitespace-pre-wrap font-mono">
+                        {log.transcript || 'No transcript text captured.'}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            ) : (
+              <div className="text-center py-4 text-xs text-gray-400 border border-dashed border-gray-100 dark:border-gray-800 rounded-xl">
+                No call logs recorded for this lead.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
