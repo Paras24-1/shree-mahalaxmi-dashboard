@@ -10,36 +10,55 @@ export async function GET(req: NextRequest) {
     const assignedTo   = searchParams.get('assigned_to')   || ''
     const assignFilter = searchParams.get('assign_filter') || ''
 
-    let query = supabaseAdmin
-      .from('conversations')
-      .select('*')
-      .order('updated_at', { ascending: false })
+    let allData: any[] = []
+    let page = 0
+    const pageSize = 1000
+    let hasMore = true
 
-    // Employee: only their assigned chats
-    if (assignedTo) {
-      query = query.eq('assigned_to', assignedTo)
-    }
+    while (hasMore) {
+      let pageQuery = supabaseAdmin
+        .from('conversations')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1)
 
-    // Admin assignment filter tabs
-    if (assignFilter === 'unassigned') {
-      query = query.is('assigned_to', null)
-    } else if (assignFilter === 'assigned') {
-      query = query.not('assigned_to', 'is', null)
-    }
+      // Employee: only their assigned chats
+      if (assignedTo) {
+        pageQuery = pageQuery.eq('assigned_to', assignedTo)
+      }
 
-    if (search) query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
-    if (stage) {
-      if (stage === 'interested') {
-        query = query.in('stage', ['interested', 'callback_done_by_ai'])
+      // Admin assignment filter tabs
+      if (assignFilter === 'unassigned') {
+        pageQuery = pageQuery.is('assigned_to', null)
+      } else if (assignFilter === 'assigned') {
+        pageQuery = pageQuery.not('assigned_to', 'is', null)
+      }
+
+      if (search) pageQuery = pageQuery.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
+      if (stage) {
+        if (stage === 'interested') {
+          pageQuery = pageQuery.in('stage', ['interested', 'callback_done_by_ai'])
+        } else {
+          pageQuery = pageQuery.eq('stage', stage)
+        }
+      }
+      if (unread) pageQuery = pageQuery.gt('unread_count', 0)
+
+      const { data, error } = await pageQuery
+      if (error) throw error
+
+      if (data && data.length > 0) {
+        allData = [...allData, ...data]
+        page++
+        if (data.length < pageSize) {
+          hasMore = false
+        }
       } else {
-        query = query.eq('stage', stage)
+        hasMore = false
       }
     }
-    if (unread) query = query.gt('unread_count', 0)
 
-    const { data, error } = await query
-    if (error) throw error
-    return NextResponse.json(data || [])
+    return NextResponse.json(allData)
   } catch (err) {
     console.error('[conversations]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

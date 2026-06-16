@@ -62,12 +62,30 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('conversation_assignments')
-      .select('*')
+    let allAssignments: any[] = []
+    let page = 0
+    const pageSize = 1000
+    let hasMore = true
 
-    if (error) throw error
-    return NextResponse.json(data || [])
+    while (hasMore) {
+      const { data, error } = await supabaseAdmin
+        .from('conversation_assignments')
+        .select('*')
+        .range(page * pageSize, (page + 1) * pageSize - 1)
+
+      if (error) throw error
+      if (data && data.length > 0) {
+        allAssignments = [...allAssignments, ...data]
+        page++
+        if (data.length < pageSize) {
+          hasMore = false
+        }
+      } else {
+        hasMore = false
+      }
+    }
+
+    return NextResponse.json(allAssignments)
   } catch (err) {
     console.error('[assignments GET]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
