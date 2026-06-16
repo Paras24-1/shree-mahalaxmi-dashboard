@@ -93,6 +93,9 @@ export async function GET(request: Request) {
       outgoing: number
       incoming: number
       missed: number
+      total: number
+      picked: number
+      notPicked: number
       missedBreakdown: { busy: number, 'no-answer': number, failed: number }
     }>()
 
@@ -104,6 +107,9 @@ export async function GET(request: Request) {
           outgoing: 0,
           incoming: 0,
           missed: 0,
+          total: 0,
+          picked: 0,
+          notPicked: 0,
           missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 }
         })
       }
@@ -114,8 +120,13 @@ export async function GET(request: Request) {
       outgoing: 0,
       incoming: 0,
       missed: 0,
+      total: 0,
+      picked: 0,
+      notPicked: 0,
       missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 }
     })
+
+    const callLogsList: any[] = []
 
     // Loop through call logs and aggregate statistics
     if (callLogs) {
@@ -148,8 +159,10 @@ export async function GET(request: Request) {
           const statusStr = String(log.status).toLowerCase()
           const isMissed = ['busy', 'no-answer', 'failed', 'timeout'].includes(statusStr)
 
+          stats.total++
           if (isMissed) {
             stats.missed++
+            stats.notPicked++
             if (statusStr.includes('busy')) {
               stats.missedBreakdown.busy++
             } else if (statusStr.includes('no-answer') || statusStr.includes('no_answer')) {
@@ -158,12 +171,23 @@ export async function GET(request: Request) {
               stats.missedBreakdown.failed++
             }
           } else {
+            stats.picked++
             if (direction === 'incoming') {
               stats.incoming++
             } else {
               stats.outgoing++
             }
           }
+
+          callLogsList.push({
+            id: log.id,
+            customerPhone: last10,
+            direction,
+            status: log.status,
+            isPicked: !isMissed,
+            assignedTo,
+            createdAt: log.created_at
+          })
         }
       }
     }
@@ -174,9 +198,13 @@ export async function GET(request: Request) {
         outgoing: 0,
         incoming: 0,
         missed: 0,
+        total: 0,
+        picked: 0,
+        notPicked: 0,
         missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 }
       },
-      employees: [] as any[]
+      employees: [] as any[],
+      callLogs: callLogsList
     }
 
     employeeStatsMap.forEach((stats, empId) => {
@@ -193,6 +221,9 @@ export async function GET(request: Request) {
       result.allTeam.outgoing += stats.outgoing
       result.allTeam.incoming += stats.incoming
       result.allTeam.missed += stats.missed
+      result.allTeam.total += stats.total
+      result.allTeam.picked += stats.picked
+      result.allTeam.notPicked += stats.notPicked
       result.allTeam.missedBreakdown.busy += stats.missedBreakdown.busy
       result.allTeam.missedBreakdown['no-answer'] += stats.missedBreakdown['no-answer']
       result.allTeam.missedBreakdown.failed += stats.missedBreakdown.failed
@@ -200,7 +231,7 @@ export async function GET(request: Request) {
 
     // Add unassigned category for transparency
     const unassignedStats = employeeStatsMap.get(unassignedKey)
-    if (unassignedStats && (unassignedStats.outgoing > 0 || unassignedStats.incoming > 0 || unassignedStats.missed > 0)) {
+    if (unassignedStats && (unassignedStats.total > 0 || unassignedStats.outgoing > 0 || unassignedStats.incoming > 0 || unassignedStats.missed > 0)) {
       result.employees.push({
         id: unassignedKey,
         name: 'Unassigned Leads',

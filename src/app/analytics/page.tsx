@@ -81,10 +81,11 @@ function AnalyticsContent() {
   }
 
   const activeCallStats = useMemo(() => {
-    if (!callAnalytics) return { outgoing: 0, incoming: 0, missed: 0, missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 } }
-    if (selectedEmployeeId === 'all') return callAnalytics.allTeam
+    const defaultStats = { outgoing: 0, incoming: 0, missed: 0, total: 0, picked: 0, notPicked: 0, missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 } }
+    if (!callAnalytics) return defaultStats
+    if (selectedEmployeeId === 'all') return callAnalytics.allTeam || defaultStats
     const emp = callAnalytics.employees.find((e: any) => e.id === selectedEmployeeId)
-    return emp || { outgoing: 0, incoming: 0, missed: 0, missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 } }
+    return emp || defaultStats
   }, [callAnalytics, selectedEmployeeId])
 
   const missedBreakdownData = useMemo(() => {
@@ -251,15 +252,50 @@ function AnalyticsContent() {
     }
   }
 
-  const matchingConvs = stats ? getFilteredConversations(allConversations, timeRange).filter(c => {
-    if (selectedCategory === 'interested') {
-      return c.stage === 'interested' || c.stage === 'callback_done_by_ai'
+  const matchingConvs = useMemo(() => {
+    if (!selectedCategory) return []
+
+    // If it's call analytics selection:
+    if (selectedCategory.startsWith('call_')) {
+      if (!callAnalytics || !callAnalytics.callLogs) return []
+      
+      // Filter call logs by employee selection
+      const filteredLogs = callAnalytics.callLogs.filter((log: any) => {
+        if (selectedEmployeeId === 'all') return true
+        return log.assignedTo === selectedEmployeeId
+      })
+
+      // Further filter call logs based on clicked category
+      let targetLogs = filteredLogs
+      if (selectedCategory === 'call_picked') {
+        targetLogs = filteredLogs.filter((log: any) => log.isPicked)
+      } else if (selectedCategory === 'call_not_picked') {
+        targetLogs = filteredLogs.filter((log: any) => !log.isPicked)
+      }
+
+      // Get unique customer phone numbers (last 10 digits)
+      const targetPhones = new Set(targetLogs.map((log: any) => log.customerPhone))
+
+      // Return unique conversations that match these phone numbers
+      return allConversations.filter(c => {
+        if (!c.phone_number) return false
+        const clean = c.phone_number.replace(/\D/g, '')
+        const last10 = clean.slice(-10)
+        return targetPhones.has(last10)
+      })
     }
-    if (selectedCategory === 'callback_done_by_ai') {
-      return c.stage === 'callback_done_by_ai'
-    }
-    return (c.stage || 'new') === selectedCategory
-  }) : []
+
+    // Default CRM stages
+    return stats ? getFilteredConversations(allConversations, timeRange).filter(c => {
+      if (selectedCategory === 'interested') {
+        return c.stage === 'interested' || c.stage === 'callback_done_by_ai'
+      }
+      if (selectedCategory === 'callback_done_by_ai') {
+        return c.stage === 'callback_done_by_ai'
+      }
+      return (c.stage || 'new') === selectedCategory
+    }) : []
+  }, [selectedCategory, callAnalytics, selectedEmployeeId, allConversations, timeRange, stats])
 
   if (loading) {
     return (
@@ -425,33 +461,45 @@ function AnalyticsContent() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Call Stats Summary Cards */}
               <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 h-fit">
-                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-500 flex items-center justify-center shrink-0">
-                    <Phone className="w-6 h-6 rotate-45" />
+                {/* Total Calls Done by AI */}
+                <div 
+                  onClick={() => setSelectedCategory('call_total')}
+                  className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 flex items-center justify-center shrink-0">
+                    <Phone className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-medium">Missed</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.missed}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Total Calls Done by AI</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.total || 0}</p>
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4">
+                {/* Call Picked */}
+                <div 
+                  onClick={() => setSelectedCategory('call_picked')}
+                  className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
+                >
                   <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 flex items-center justify-center shrink-0">
                     <Phone className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-medium">Outgoing</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.outgoing}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Call Picked</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.picked || 0}</p>
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-500 flex items-center justify-center shrink-0">
-                    <Phone className="w-6 h-6 rotate-90" />
+                {/* Calls Not Picked */}
+                <div 
+                  onClick={() => setSelectedCategory('call_not_picked')}
+                  className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-500 flex items-center justify-center shrink-0">
+                    <Phone className="w-6 h-6 rotate-45" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-medium">Incoming</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.incoming}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Calls Not Picked</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.notPicked || 0}</p>
                   </div>
                 </div>
               </div>
@@ -460,10 +508,10 @@ function AnalyticsContent() {
               <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex flex-col justify-between">
                 <div>
                   <h3 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
-                    Missed Calls Breakdown ({activeCallStats.missed})
+                    Not Picked Calls Breakdown ({activeCallStats.notPicked || 0})
                   </h3>
                 </div>
-                {activeCallStats.missed > 0 ? (
+                {(activeCallStats.notPicked || 0) > 0 ? (
                   <div className="flex flex-col items-center justify-center">
                     <div className="w-full h-[180px] relative flex items-center justify-center">
                       <ResponsiveContainer width="100%" height="100%">
@@ -494,14 +542,14 @@ function AnalyticsContent() {
                       </ResponsiveContainer>
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                         <Phone className="w-5 h-5 text-red-500 rotate-45" />
-                        <span className="text-xs font-bold text-gray-550 mt-0.5">{activeCallStats.missed} Total</span>
+                        <span className="text-xs font-bold text-gray-550 mt-0.5">{activeCallStats.notPicked || 0} Total</span>
                       </div>
                     </div>
                     {/* Legend */}
                     <div className="grid grid-cols-3 gap-2 w-full mt-2">
                       {missedBreakdownData.map((item, index) => {
-                        const percent = activeCallStats.missed > 0 
-                          ? ((item.value / activeCallStats.missed) * 100).toFixed(0)
+                        const percent = activeCallStats.notPicked > 0 
+                          ? ((item.value / activeCallStats.notPicked) * 100).toFixed(0)
                           : '0';
                         return (
                           <div key={index} className="flex flex-col items-center text-center">
@@ -666,7 +714,10 @@ function AnalyticsContent() {
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50">
               <div>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                  Leads for "{selectedCategory.replace(/_/g, ' ').toUpperCase()}" ({matchingConvs.length})
+                  {selectedCategory === 'call_total' && `Total Calls Done by AI (${matchingConvs.length})`}
+                  {selectedCategory === 'call_picked' && `Picked Calls (${matchingConvs.length})`}
+                  {selectedCategory === 'call_not_picked' && `Not Picked Calls (${matchingConvs.length})`}
+                  {!selectedCategory.startsWith('call_') && `Leads for "${selectedCategory.replace(/_/g, ' ').toUpperCase()}" (${matchingConvs.length})`}
                 </h3>
                 <p className="text-xs text-gray-500">Filtered by time range: {timeRange.toUpperCase()}</p>
               </div>
