@@ -4,6 +4,57 @@ import React, { useState, useEffect } from 'react'
 import { Conversation, Lead, LeadActivity } from '@/types'
 import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save, Calendar, Clock, Trash2, X, Plus, Check, Edit2 } from 'lucide-react'
 
+// Helper to clean, parse, and split call transcripts into structured speech bubbles, skipping debug logs
+const parseTranscript = (transcriptText: string) => {
+  if (!transcriptText) return [];
+  const lines = transcriptText.split('\n');
+  const messages: { role: 'agent' | 'user'; text: string }[] = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    
+    // Skip debug lines
+    if (trimmed.startsWith('[DEBUG EVENT]') || trimmed.startsWith('[DEBUG]')) {
+      continue;
+    }
+    
+    // Check if it matches role prefixes
+    if (trimmed.startsWith('[AGENT]:')) {
+      messages.push({
+        role: 'agent',
+        text: trimmed.replace(/^\[AGENT\]:\s*/i, '')
+      });
+    } else if (trimmed.startsWith('[USER]:')) {
+      messages.push({
+        role: 'user',
+        text: trimmed.replace(/^\[USER\]:\s*/i, '')
+      });
+    } else if (trimmed.startsWith('[Gemini Transcript Output]:')) {
+      messages.push({
+        role: 'agent',
+        text: trimmed.replace(/^\[Gemini Transcript Output\]:\s*/i, '')
+      });
+    } else if (trimmed.startsWith('[Gemini Transcript Input]:')) {
+      messages.push({
+        role: 'user',
+        text: trimmed.replace(/^\[Gemini Transcript Input\]:\s*/i, '')
+      });
+    } else {
+      // If no prefix matches, treat as continuation of the previous message
+      if (messages.length > 0) {
+        messages[messages.length - 1].text += '\n' + trimmed;
+      } else {
+        messages.push({
+          role: 'agent',
+          text: trimmed
+        });
+      }
+    }
+  }
+  return messages;
+};
+
 export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   conversation: Conversation | null
   lead: Lead | null
@@ -715,11 +766,40 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
                       </button>
                     </div>
 
-                    {isExpanded && (
-                      <div className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-950 p-2.5 rounded-lg border border-gray-150 dark:border-gray-800 max-h-[220px] overflow-y-auto whitespace-pre-wrap font-mono">
-                        {log.transcript || 'No transcript text captured.'}
-                      </div>
-                    )}
+                    {isExpanded && (() => {
+                      const messages = parseTranscript(log.transcript);
+                      return (
+                        <div className="flex flex-col gap-2.5 bg-white dark:bg-gray-950 p-3 rounded-xl border border-gray-150 dark:border-gray-800/80 max-h-[280px] overflow-y-auto shadow-inner">
+                          {messages.length > 0 ? (
+                            messages.map((msg, idx) => (
+                              <div
+                                key={idx}
+                                className={`flex flex-col max-w-[85%] ${
+                                  msg.role === 'agent' ? 'self-start items-start' : 'self-end items-end'
+                                }`}
+                              >
+                                <span className="text-[9px] text-gray-400 dark:text-gray-500 font-semibold mb-0.5 px-1.5 tracking-wider uppercase">
+                                  {msg.role === 'agent' ? 'Vox AI Agent' : 'Customer'}
+                                </span>
+                                <div
+                                  className={`px-3 py-2 rounded-2xl text-[11px] leading-relaxed whitespace-pre-wrap ${
+                                    msg.role === 'agent'
+                                      ? 'bg-violet-50/70 dark:bg-violet-950/20 text-gray-800 dark:text-gray-200 border border-violet-100/50 dark:border-violet-900/20 rounded-tl-none shadow-sm'
+                                      : 'bg-emerald-50/70 dark:bg-emerald-950/20 text-gray-800 dark:text-gray-200 border border-emerald-100/50 dark:border-emerald-900/20 rounded-tr-none shadow-sm'
+                                  }`}
+                                >
+                                  {msg.text}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-gray-400 dark:text-gray-600 text-center py-4 italic">
+                              No voice transcripts captured.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )
               })
