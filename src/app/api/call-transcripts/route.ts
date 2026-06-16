@@ -1,5 +1,14 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin as defaultSupabaseAdmin } from '@/lib/supabase'
+
+// Initialize a dedicated client for Voice SaaS database if configured in environment variables
+const voiceSaasSupabaseUrl = process.env.VOICE_SAAS_SUPABASE_URL
+const voiceSaasSupabaseServiceKey = process.env.VOICE_SAAS_SUPABASE_SERVICE_ROLE_KEY
+
+const queryClient = (voiceSaasSupabaseUrl && voiceSaasSupabaseServiceKey)
+  ? createClient(voiceSaasSupabaseUrl, voiceSaasSupabaseServiceKey)
+  : defaultSupabaseAdmin
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -19,7 +28,7 @@ export async function GET(request: Request) {
   const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone
 
   // Fetch call logs matching this lead's phone number as caller or recipient using prefix-agnostic search
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await queryClient
     .from('call_logs')
     .select('id, duration_seconds, status, transcript, created_at')
     .or(`from_phone_number.ilike.%${last10}%,to_phone_number.ilike.%${last10}%`)
