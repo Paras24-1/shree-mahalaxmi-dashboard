@@ -88,6 +88,39 @@ function AnalyticsContent() {
     return emp || defaultStats
   }, [callAnalytics, selectedEmployeeId])
 
+  const uniqueLeadsStats = useMemo(() => {
+    const getLeadsForCategory = (category: 'call_total' | 'call_picked' | 'call_not_picked') => {
+      if (!callAnalytics || !callAnalytics.callLogs) return []
+      
+      const filteredLogs = callAnalytics.callLogs.filter((log: any) => {
+        if (selectedEmployeeId === 'all') return true
+        return log.assignedTo === selectedEmployeeId
+      })
+
+      let targetLogs = filteredLogs
+      if (category === 'call_picked') {
+        targetLogs = filteredLogs.filter((log: any) => log.isPicked)
+      } else if (category === 'call_not_picked') {
+        targetLogs = filteredLogs.filter((log: any) => !log.isPicked)
+      }
+
+      const targetPhones = new Set(targetLogs.map((log: any) => log.customerPhone))
+
+      return allConversations.filter(c => {
+        if (!c.phone_number) return false
+        const clean = c.phone_number.replace(/\D/g, '')
+        const last10 = clean.slice(-10)
+        return targetPhones.has(last10)
+      })
+    }
+
+    return {
+      totalLeads: getLeadsForCategory('call_total').length,
+      pickedLeads: getLeadsForCategory('call_picked').length,
+      notPickedLeads: getLeadsForCategory('call_not_picked').length
+    }
+  }, [callAnalytics, selectedEmployeeId, allConversations])
+
   const missedBreakdownData = useMemo(() => {
     const bd = activeCallStats.missedBreakdown || { busy: 0, 'no-answer': 0, failed: 0 }
     return [
@@ -461,7 +494,7 @@ function AnalyticsContent() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Call Stats Summary Cards */}
               <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 h-fit">
-                {/* Total Calls Done by AI */}
+                {/* Total Leads Called */}
                 <div 
                   onClick={() => setSelectedCategory('call_total')}
                   className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
@@ -470,12 +503,12 @@ function AnalyticsContent() {
                     <Phone className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-semibold">Total Calls Done by AI</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.total || 0}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Total Leads Called</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{uniqueLeadsStats.totalLeads}</p>
                   </div>
                 </div>
 
-                {/* Call Picked */}
+                {/* Leads Answered */}
                 <div 
                   onClick={() => setSelectedCategory('call_picked')}
                   className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
@@ -484,12 +517,12 @@ function AnalyticsContent() {
                     <Phone className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-semibold">Call Picked</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.picked || 0}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Leads Answered</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{uniqueLeadsStats.pickedLeads}</p>
                   </div>
                 </div>
 
-                {/* Calls Not Picked */}
+                {/* Leads Not Answered */}
                 <div 
                   onClick={() => setSelectedCategory('call_not_picked')}
                   className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
@@ -498,8 +531,8 @@ function AnalyticsContent() {
                     <Phone className="w-6 h-6 rotate-45" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-semibold">Calls Not Picked</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.notPicked || 0}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Leads Not Answered</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{uniqueLeadsStats.notPickedLeads}</p>
                   </div>
                 </div>
               </div>
@@ -714,9 +747,9 @@ function AnalyticsContent() {
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50">
               <div>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                  {selectedCategory === 'call_total' && `Total Calls Done by AI (${matchingConvs.length})`}
-                  {selectedCategory === 'call_picked' && `Picked Calls (${matchingConvs.length})`}
-                  {selectedCategory === 'call_not_picked' && `Not Picked Calls (${matchingConvs.length})`}
+                  {selectedCategory === 'call_total' && `Total Leads Called (${matchingConvs.length})`}
+                  {selectedCategory === 'call_picked' && `Leads Answered (${matchingConvs.length})`}
+                  {selectedCategory === 'call_not_picked' && `Leads Not Answered (${matchingConvs.length})`}
                   {!selectedCategory.startsWith('call_') && `Leads for "${selectedCategory.replace(/_/g, ' ').toUpperCase()}" (${matchingConvs.length})`}
                 </h3>
                 <p className="text-xs text-gray-500">Filtered by time range: {timeRange.toUpperCase()}</p>
