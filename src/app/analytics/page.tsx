@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, Users, MessageSquare, CheckCircle, Clock, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Users, MessageSquare, CheckCircle, Clock, TrendingUp, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -46,7 +46,14 @@ export default function AnalyticsPage() {
 }
 
 function AnalyticsContent() {
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [allConversations, setAllConversations] = useState<any[]>([])
+  const [allEmployees, setAllEmployees] = useState<any[]>([])
+  const [allAssignments, setAllAssignments] = useState<any[]>([])
+  const [timeRange, setTimeRange] = useState<'today' | 'weekly' | 'monthly' | 'all'>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [selectedConv, setSelectedConv] = useState<any | null>(null)
+  const [messages, setMessages] = useState<any[]>([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -110,40 +117,9 @@ function AnalyticsContent() {
       }
 
       if (conversations && employees) {
-        const employeeStats: EmployeeStats[] = employees.map(emp => {
-          const assigned = conversations.filter(c => c.assigned_to === emp.id)
-          const empAssignments = assignments?.filter(a => a.assigned_to === emp.id) || []
-          const active = empAssignments.filter(a => a.status === 'active').length
-          const completed = empAssignments.filter(a => a.status === 'completed').length
-
-          return {
-            id: emp.id,
-            name: emp.name,
-            email: emp.email,
-            total_assigned: assigned.length,
-            active,
-            completed
-          }
-        })
-        const stageCounts = {
-          new: conversations.filter(c => (c.stage || 'new') === 'new').length,
-          callback_done_by_ai: conversations.filter(c => c.stage === 'callback_done_by_ai').length,
-          interested: conversations.filter(c => c.stage === 'interested').length,
-          booking: conversations.filter(c => c.stage === 'booking').length,
-          confirmed: conversations.filter(c => c.stage === 'confirmed').length,
-          completed: conversations.filter(c => c.stage === 'completed').length,
-          cancelled: conversations.filter(c => c.stage === 'cancelled').length,
-        }
-
-        setStats({
-          stage_counts: stageCounts,
-          total_conversations: conversations.length,
-          total_assigned: conversations.filter(c => c.assigned_to).length,
-          total_unassigned: conversations.filter(c => !c.assigned_to).length,
-          total_active: assignments?.filter(a => a.status === 'active').length || 0,
-          total_completed: assignments?.filter(a => a.status === 'completed').length || 0,
-          employees: employeeStats
-        })
+        setAllConversations(conversations)
+        setAllEmployees(employees)
+        setAllAssignments(assignments || [])
       }
     } catch (err) {
       console.error('Failed to fetch stats:', err)
@@ -151,6 +127,97 @@ function AnalyticsContent() {
       setLoading(false)
     }
   }
+
+  const getFilteredConversations = (convs: any[], range: string) => {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    
+    return convs.filter(c => {
+      const createdDate = new Date(c.created_at)
+      if (range === 'today') {
+        return createdDate >= startOfToday
+      }
+      if (range === 'weekly') {
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        return createdDate >= sevenDaysAgo
+      }
+      if (range === 'monthly') {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        return createdDate >= thirtyDaysAgo
+      }
+      return true
+    })
+  }
+
+  const computedStats = useMemo(() => {
+    if (allConversations.length === 0) return null
+
+    const filteredConvs = getFilteredConversations(allConversations, timeRange)
+    const filteredConvIds = new Set(filteredConvs.map(c => c.id))
+
+    const employeeStats: EmployeeStats[] = allEmployees.map(emp => {
+      const assigned = filteredConvs.filter(c => c.assigned_to === emp.id)
+      const empAssignments = allAssignments.filter(a => a.assigned_to === emp.id && filteredConvIds.has(a.conversation_id))
+      const active = empAssignments.filter(a => a.status === 'active').length
+      const completed = empAssignments.filter(a => a.status === 'completed').length
+
+      return {
+        id: emp.id,
+        name: emp.name,
+        email: emp.email,
+        total_assigned: assigned.length,
+        active,
+        completed
+      }
+    })
+
+    const stageCounts = {
+      new: filteredConvs.filter(c => (c.stage || 'new') === 'new').length,
+      callback_done_by_ai: filteredConvs.filter(c => c.stage === 'callback_done_by_ai').length,
+      interested: filteredConvs.filter(c => c.stage === 'interested' || c.stage === 'callback_done_by_ai').length,
+      booking: filteredConvs.filter(c => c.stage === 'booking').length,
+      confirmed: filteredConvs.filter(c => c.stage === 'confirmed').length,
+      completed: filteredConvs.filter(c => c.stage === 'completed').length,
+      cancelled: filteredConvs.filter(c => c.stage === 'cancelled').length,
+    }
+
+    return {
+      stage_counts: stageCounts,
+      total_conversations: filteredConvs.length,
+      total_assigned: filteredConvs.filter(c => c.assigned_to).length,
+      total_unassigned: filteredConvs.filter(c => !c.assigned_to).length,
+      total_active: allAssignments.filter(a => a.status === 'active' && filteredConvIds.has(a.conversation_id)).length,
+      total_completed: allAssignments.filter(a => a.status === 'completed' && filteredConvIds.has(a.conversation_id)).length,
+      employees: employeeStats
+    }
+  }, [allConversations, allEmployees, allAssignments, timeRange])
+
+  const stats = computedStats
+
+  const fetchConvMessages = async (convId: string) => {
+    setLoadingMessages(true)
+    try {
+      const res = await fetch(`/api/messages?conversation_id=${convId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMessages(data || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch messages:', err)
+    } finally {
+      setLoadingMessages(false)
+    }
+  }
+
+  const matchingConvs = stats ? getFilteredConversations(allConversations, timeRange).filter(c => {
+    if (selectedCategory === 'interested') {
+      return c.stage === 'interested' || c.stage === 'callback_done_by_ai'
+    }
+    if (selectedCategory === 'callback_done_by_ai') {
+      return c.stage === 'callback_done_by_ai'
+    }
+    return (c.stage || 'new') === selectedCategory
+  }) : []
 
   if (loading) {
     return (
@@ -190,18 +257,40 @@ function AnalyticsContent() {
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
       {/* Header */}
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Link
               href="/"
               className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <ArrowLeft className="w-5 h-5 text-gray-650 dark:text-gray-400" />
             </Link>
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">Analytics Dashboard</h1>
               <p className="text-sm text-gray-500">Team performance and conversation insights</p>
             </div>
+          </div>
+
+          {/* Time Range Selector */}
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+            {[
+              { id: 'today', label: 'Today' },
+              { id: 'weekly', label: 'Weekly (7d)' },
+              { id: 'monthly', label: 'Monthly (30d)' },
+              { id: 'all', label: 'All Time' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setTimeRange(tab.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  timeRange === tab.id
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
       </header>
@@ -234,13 +323,27 @@ function AnalyticsContent() {
 
            {/* Lead Stages */}
 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
-  <StageCard label="New" value={stats.stage_counts.new} color="gray" />
-  <StageCard label="Callback Done by AI" value={stats.stage_counts.callback_done_by_ai} color="blue" />
-  <StageCard label="Interested" value={stats.stage_counts.interested} color="indigo" />
-  <StageCard label="Booking" value={stats.stage_counts.booking} color="amber" />
-  <StageCard label="Confirmed" value={stats.stage_counts.confirmed} color="green" />
-  <StageCard label="Completed" value={stats.stage_counts.completed} color="purple" />
-  <StageCard label="Cancelled" value={stats.stage_counts.cancelled} color="red" />
+  <div onClick={() => setSelectedCategory('new')} className="cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+    <StageCard label="New" value={stats.stage_counts.new} color="gray" />
+  </div>
+  <div onClick={() => setSelectedCategory('callback_done_by_ai')} className="cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+    <StageCard label="Callback Done by AI" value={stats.stage_counts.callback_done_by_ai} color="blue" />
+  </div>
+  <div onClick={() => setSelectedCategory('interested')} className="cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+    <StageCard label="Interested" value={stats.stage_counts.interested} color="indigo" />
+  </div>
+  <div onClick={() => setSelectedCategory('booking')} className="cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+    <StageCard label="Booking" value={stats.stage_counts.booking} color="amber" />
+  </div>
+  <div onClick={() => setSelectedCategory('confirmed')} className="cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+    <StageCard label="Confirmed" value={stats.stage_counts.confirmed} color="green" />
+  </div>
+  <div onClick={() => setSelectedCategory('completed')} className="cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+    <StageCard label="Completed" value={stats.stage_counts.completed} color="purple" />
+  </div>
+  <div onClick={() => setSelectedCategory('cancelled')} className="cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+    <StageCard label="Cancelled" value={stats.stage_counts.cancelled} color="red" />
+  </div>
 </div>
 
         {/* Charts Row */}
@@ -368,6 +471,141 @@ function AnalyticsContent() {
           </div>
         </div>
       </div>
+
+      {/* Leads Drawer / Chat Viewer Modal */}
+      {selectedCategory && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                  Leads for "{selectedCategory.replace(/_/g, ' ').toUpperCase()}" ({matchingConvs.length})
+                </h3>
+                <p className="text-xs text-gray-500">Filtered by time range: {timeRange.toUpperCase()}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedCategory(null)
+                  setSelectedConv(null)
+                  setMessages([])
+                }}
+                className="p-2 rounded-xl hover:bg-gray-250 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 flex overflow-hidden min-h-0">
+              {/* Left Column: Lead List */}
+              <div className="w-1/3 border-r border-gray-200 dark:border-gray-800 overflow-y-auto p-4 space-y-2">
+                {matchingConvs.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400 text-xs">
+                    No leads found.
+                  </div>
+                ) : (
+                  matchingConvs.map((conv) => {
+                    const isSelected = selectedConv?.id === conv.id
+                    return (
+                      <div
+                        key={conv.id}
+                        onClick={() => {
+                          setSelectedConv(conv)
+                          fetchConvMessages(conv.id)
+                        }}
+                        className={`p-3.5 rounded-2xl cursor-pointer transition-all border text-left ${
+                          isSelected
+                            ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-950/20 dark:border-emerald-500'
+                            : 'bg-white border-gray-150 dark:bg-gray-900 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
+                        }`}
+                      >
+                        <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                          {conv.name || 'Unknown'}
+                        </p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{conv.phone_number}</p>
+                        {conv.last_message && (
+                          <p className="text-[10px] text-gray-450 dark:text-gray-500 truncate mt-1">
+                            {conv.last_message}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Right Column: Chat Window */}
+              <div className="w-2/3 flex flex-col overflow-hidden bg-gray-50/50 dark:bg-gray-950/20">
+                {selectedConv ? (
+                  <>
+                    {/* Selected Lead Header */}
+                    <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-900">
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-900 dark:text-white">{selectedConv.name || 'Unknown'}</h4>
+                        <p className="text-[10px] text-gray-505 mt-0.5">{selectedConv.phone_number}</p>
+                      </div>
+                      <Link
+                        href={`/?conversation_id=${selectedConv.id}`}
+                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-[10px] font-semibold transition-all duration-200"
+                      >
+                        Open Chat in CRM
+                      </Link>
+                    </div>
+
+                    {/* Chat Messages */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                      {loadingMessages ? (
+                        <div className="h-full flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                        </div>
+                      ) : messages.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-gray-400 text-xs">
+                          No messages in this chat.
+                        </div>
+                      ) : (
+                        messages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div className="max-w-[75%]">
+                              <div
+                                className={`rounded-2xl px-4 py-2 text-xs leading-relaxed ${
+                                  msg.direction === 'outgoing'
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-white border border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-gray-950 dark:text-white shadow-sm'
+                                }`}
+                              >
+                                {msg.media_url && msg.media_type?.startsWith('image/') && (
+                                  <img
+                                    src={msg.media_url}
+                                    alt="Sent image"
+                                    className="rounded-lg mb-2 max-w-full h-auto"
+                                  />
+                                )}
+                                {msg.message && <p className="whitespace-pre-wrap break-words">{msg.message}</p>}
+                              </div>
+                              <p className={`text-[9px] text-gray-450 mt-1 ${msg.direction === 'outgoing' ? 'text-right' : 'text-left'}`}>
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-6">
+                    <MessageSquare className="w-12 h-12 mb-3 text-gray-350 dark:text-gray-700 stroke-[1.5]" />
+                    <p className="text-xs">Select a lead from the list to view chat history</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

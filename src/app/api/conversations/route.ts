@@ -28,7 +28,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
-    if (stage)  query = query.eq('stage', stage)
+    if (stage) {
+      if (stage === 'interested') {
+        query = query.in('stage', ['interested', 'callback_done_by_ai'])
+      } else {
+        query = query.eq('stage', stage)
+      }
+    }
     if (unread) query = query.gt('unread_count', 0)
 
     const { data, error } = await query

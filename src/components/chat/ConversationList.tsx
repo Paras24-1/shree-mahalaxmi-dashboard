@@ -325,10 +325,21 @@ function ConversationItem({
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
           {conv.last_message || 'No messages yet'}
         </p>
-        <div className="flex items-center gap-2 mt-1.5">
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS[conv.stage as Stage] || STAGE_COLORS.new}`}>
-            {conv.stage}
-          </span>
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {conv.stage === 'callback_done_by_ai' ? (
+            <>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS.callback_done_by_ai}`}>
+                callback_done_by_ai
+              </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS.interested}`}>
+                interested
+              </span>
+            </>
+          ) : (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS[conv.stage as Stage] || STAGE_COLORS.new}`}>
+              {conv.stage}
+            </span>
+          )}
           
           {/* Assignment Badge */}
           {assignedEmployee && (
