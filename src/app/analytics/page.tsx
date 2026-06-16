@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, Users, MessageSquare, CheckCircle, Clock, TrendingUp, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, Users, MessageSquare, CheckCircle, Clock, TrendingUp, X, Loader2, Phone } from 'lucide-react'
 import Link from 'next/link'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -55,6 +55,48 @@ function AnalyticsContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // Call Analytics states
+  const [callAnalytics, setCallAnalytics] = useState<any>(null)
+  const [loadingCalls, setLoadingCalls] = useState(false)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all')
+
+  useEffect(() => {
+    fetchCallAnalytics()
+  }, [timeRange])
+
+  const fetchCallAnalytics = async () => {
+    setLoadingCalls(true)
+    try {
+      const res = await fetch(`/api/call-analytics?timeRange=${timeRange}`)
+      if (res.ok) {
+        const data = await res.json()
+        setCallAnalytics(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch call analytics:', err)
+    } finally {
+      setLoadingCalls(false)
+    }
+  }
+
+  const activeCallStats = useMemo(() => {
+    if (!callAnalytics) return { outgoing: 0, incoming: 0, missed: 0, missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 } }
+    if (selectedEmployeeId === 'all') return callAnalytics.allTeam
+    const emp = callAnalytics.employees.find((e: any) => e.id === selectedEmployeeId)
+    return emp || { outgoing: 0, incoming: 0, missed: 0, missedBreakdown: { busy: 0, 'no-answer': 0, failed: 0 } }
+  }, [callAnalytics, selectedEmployeeId])
+
+  const missedBreakdownData = useMemo(() => {
+    const bd = activeCallStats.missedBreakdown || { busy: 0, 'no-answer': 0, failed: 0 }
+    return [
+      { name: 'Line Busy', value: bd.busy || 0 },
+      { name: 'Not Answered', value: bd['no-answer'] || 0 },
+      { name: 'Failed / Timeout', value: bd.failed || 0 }
+    ]
+  }, [activeCallStats])
+
+  const MISSED_COLORS = ['#f59e0b', '#ef4444', '#8b5cf6']
 
   useEffect(() => {
     fetchStats()
@@ -271,26 +313,45 @@ function AnalyticsContent() {
             </div>
           </div>
 
-          {/* Time Range Selector */}
-          <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
-            {[
-              { id: 'today', label: 'Today' },
-              { id: 'weekly', label: 'Weekly (7d)' },
-              { id: 'monthly', label: 'Monthly (30d)' },
-              { id: 'all', label: 'All Time' }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setTimeRange(tab.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  timeRange === tab.id
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            {/* Employee Filter Selector */}
+            <select
+              value={selectedEmployeeId}
+              onChange={(e) => setSelectedEmployeeId(e.target.value)}
+              className="block w-full max-w-[200px] px-3.5 py-1.5 text-xs font-semibold text-gray-705 bg-gray-50 border border-gray-250 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm"
+            >
+              <option value="all">All Team (Overall)</option>
+              {allEmployees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  Team - {emp.name}
+                </option>
+              ))}
+              {callAnalytics?.employees?.some((e: any) => e.id === 'unassigned') && (
+                <option value="unassigned">Unassigned Leads</option>
+              )}
+            </select>
+
+            {/* Time Range Selector */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+              {[
+                { id: 'today', label: 'Today' },
+                { id: 'weekly', label: 'Weekly (7d)' },
+                { id: 'monthly', label: 'Monthly (30d)' },
+                { id: 'all', label: 'All Time' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setTimeRange(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    timeRange === tab.id
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </header>
@@ -345,6 +406,131 @@ function AnalyticsContent() {
     <StageCard label="Cancelled" value={stats.stage_counts.cancelled} color="red" />
   </div>
 </div>
+
+        {/* Voice AI Call Analytics Section */}
+        <div className="border-t border-gray-250 dark:border-gray-850 pt-6 space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Phone className="w-5 h-5 text-violet-500" />
+              Voice AI Call Activity
+            </h2>
+            <p className="text-xs text-gray-500">Call outcomes and performance for the selected time range</p>
+          </div>
+
+          {loadingCalls ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+            </div>
+          ) : activeCallStats ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Call Stats Summary Cards */}
+              <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 h-fit">
+                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-500 flex items-center justify-center shrink-0">
+                    <Phone className="w-6 h-6 rotate-45" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium">Missed</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.missed}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 flex items-center justify-center shrink-0">
+                    <Phone className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium">Outgoing</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.outgoing}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-500 flex items-center justify-center shrink-0">
+                    <Phone className="w-6 h-6 rotate-90" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium">Incoming</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.incoming}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Missed Calls Donut Chart */}
+              <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
+                    Missed Calls Breakdown ({activeCallStats.missed})
+                  </h3>
+                </div>
+                {activeCallStats.missed > 0 ? (
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-full h-[180px] relative flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={missedBreakdownData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={45}
+                            outerRadius={65}
+                            paddingAngle={4}
+                            dataKey="value"
+                          >
+                            {missedBreakdownData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={MISSED_COLORS[index]} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#1f2937', 
+                              border: '1px solid #374151',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              color: '#fff'
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <Phone className="w-5 h-5 text-red-500 rotate-45" />
+                        <span className="text-xs font-bold text-gray-550 mt-0.5">{activeCallStats.missed} Total</span>
+                      </div>
+                    </div>
+                    {/* Legend */}
+                    <div className="grid grid-cols-3 gap-2 w-full mt-2">
+                      {missedBreakdownData.map((item, index) => {
+                        const percent = activeCallStats.missed > 0 
+                          ? ((item.value / activeCallStats.missed) * 100).toFixed(0)
+                          : '0';
+                        return (
+                          <div key={index} className="flex flex-col items-center text-center">
+                            <div className="flex items-center gap-1.5 justify-center">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: MISSED_COLORS[index] }} />
+                              <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate max-w-[65px]">
+                                {item.name}
+                              </span>
+                            </div>
+                            <span className="text-xs font-extrabold text-gray-900 dark:text-white mt-0.5">
+                              {item.value} ({percent}%)
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-gray-400 py-10">
+                    <Phone className="w-8 h-8 text-gray-300 dark:text-gray-700 mb-2 rotate-45" />
+                    <p className="text-xs italic">No missed calls in this period</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-400 text-xs">Failed to load call analytics.</div>
+          )}
+        </div>
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
