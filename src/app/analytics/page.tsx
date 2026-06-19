@@ -742,6 +742,17 @@ function AnalyticsContent() {
                 ) : (
                   matchingConvs.map((conv) => {
                     const isSelected = selectedConv?.id === conv.id
+                    
+                    // Compute how many times the bot called / was called by this lead
+                    const cleanPhone = conv.phone_number ? conv.phone_number.replace(/\D/g, '') : ''
+                    const last10 = cleanPhone.slice(-10)
+                    const callCount = (callAnalytics?.callLogs && last10)
+                      ? callAnalytics.callLogs.filter((log: any) => {
+                          const isEmployeeMatch = selectedEmployeeId === 'all' || log.assignedTo === selectedEmployeeId
+                          return isEmployeeMatch && log.customerPhone === last10
+                        }).length
+                      : 0
+
                     return (
                       <div
                         key={conv.id}
@@ -752,12 +763,19 @@ function AnalyticsContent() {
                         className={`p-3.5 rounded-2xl cursor-pointer transition-all border text-left ${
                           isSelected
                             ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-950/20 dark:border-emerald-500'
-                            : 'bg-white border-gray-150 dark:bg-gray-900 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
+                            : 'bg-white border-gray-150 dark:bg-gray-900 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-855'
                         }`}
                       >
-                        <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
-                          {conv.name || 'Unknown'}
-                        </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                            {conv.name || 'Unknown'}
+                          </p>
+                          {callCount > 0 && (
+                            <span className="px-2 py-0.5 rounded-full bg-violet-105 dark:bg-violet-950 text-violet-700 dark:text-violet-400 text-[9px] font-extrabold flex-shrink-0">
+                              {callCount} {callCount === 1 ? 'call' : 'calls'}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-gray-500 mt-0.5">{conv.phone_number}</p>
                         {conv.last_message && (
                           <p className="text-[10px] text-gray-450 dark:text-gray-500 truncate mt-1">
@@ -772,65 +790,83 @@ function AnalyticsContent() {
 
               {/* Right Column: Chat Window */}
               <div className="w-2/3 flex flex-col overflow-hidden bg-gray-50/50 dark:bg-gray-950/20">
-                {selectedConv ? (
-                  <>
-                    {/* Selected Lead Header */}
-                    <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-900">
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-900 dark:text-white">{selectedConv.name || 'Unknown'}</h4>
-                        <p className="text-[10px] text-gray-505 mt-0.5">{selectedConv.phone_number}</p>
-                      </div>
-                      <Link
-                        href={`/?conversation_id=${selectedConv.id}`}
-                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-[10px] font-semibold transition-all duration-200"
-                      >
-                        Open Chat in CRM
-                      </Link>
-                    </div>
+                {selectedConv ? (() => {
+                  const cleanPhone = selectedConv.phone_number ? selectedConv.phone_number.replace(/\D/g, '') : ''
+                  const last10 = cleanPhone.slice(-10)
+                  const selectedConvCallCount = (callAnalytics?.callLogs && last10)
+                    ? callAnalytics.callLogs.filter((log: any) => {
+                        const isEmployeeMatch = selectedEmployeeId === 'all' || log.assignedTo === selectedEmployeeId
+                        return isEmployeeMatch && log.customerPhone === last10
+                      }).length
+                    : 0
 
-                    {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                      {loadingMessages ? (
-                        <div className="h-full flex items-center justify-center">
-                          <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
-                        </div>
-                      ) : messages.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-gray-400 text-xs">
-                          No messages in this chat.
-                        </div>
-                      ) : (
-                        messages.map((msg) => (
-                          <div
-                            key={msg.id}
-                            className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div className="max-w-[75%]">
-                              <div
-                                className={`rounded-2xl px-4 py-2 text-xs leading-relaxed ${
-                                  msg.direction === 'outgoing'
-                                    ? 'bg-emerald-500 text-white'
-                                    : 'bg-white border border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-gray-950 dark:text-white shadow-sm'
-                                }`}
-                              >
-                                {msg.media_url && msg.media_type?.startsWith('image/') && (
-                                  <img
-                                    src={msg.media_url}
-                                    alt="Sent image"
-                                    className="rounded-lg mb-2 max-w-full h-auto"
-                                  />
-                                )}
-                                {msg.message && <p className="whitespace-pre-wrap break-words">{msg.message}</p>}
-                              </div>
-                              <p className={`text-[9px] text-gray-450 mt-1 ${msg.direction === 'outgoing' ? 'text-right' : 'text-left'}`}>
-                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
+                  return (
+                    <>
+                      {/* Selected Lead Header */}
+                      <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-900">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-bold text-gray-900 dark:text-white">{selectedConv.name || 'Unknown'}</h4>
+                            {selectedConvCallCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-750 dark:text-violet-400 text-[9px] font-extrabold">
+                                {selectedConvCallCount} {selectedConvCallCount === 1 ? 'AI Call' : 'AI Calls'}
+                              </span>
+                            )}
                           </div>
-                        ))
-                      )}
-                    </div>
-                  </>
-                ) : (
+                          <p className="text-[10px] text-gray-505 mt-0.5">{selectedConv.phone_number}</p>
+                        </div>
+                        <Link
+                          href={`/?conversation_id=${selectedConv.id}`}
+                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-[10px] font-semibold transition-all duration-200"
+                        >
+                          Open Chat in CRM
+                        </Link>
+                      </div>
+
+                      {/* Chat Messages */}
+                      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {loadingMessages ? (
+                          <div className="h-full flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                          </div>
+                        ) : messages.length === 0 ? (
+                          <div className="h-full flex items-center justify-center text-gray-400 text-xs">
+                            No messages in this chat.
+                          </div>
+                        ) : (
+                          messages.map((msg) => (
+                            <div
+                              key={msg.id}
+                              className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div className="max-w-[75%]">
+                                <div
+                                  className={`rounded-2xl px-4 py-2 text-xs leading-relaxed ${
+                                    msg.direction === 'outgoing'
+                                      ? 'bg-emerald-500 text-white'
+                                      : 'bg-white border border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-gray-950 dark:text-white shadow-sm'
+                                  }`}
+                                >
+                                  {msg.media_url && msg.media_type?.startsWith('image/') && (
+                                    <img
+                                      src={msg.media_url}
+                                      alt="Sent image"
+                                      className="rounded-lg mb-2 max-w-full h-auto"
+                                    />
+                                  )}
+                                  {msg.message && <p className="whitespace-pre-wrap break-words">{msg.message}</p>}
+                                </div>
+                                <p className={`text-[9px] text-gray-450 mt-1 ${msg.direction === 'outgoing' ? 'text-right' : 'text-left'}`}>
+                                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )
+                })() : (
                   <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-6">
                     <MessageSquare className="w-12 h-12 mb-3 text-gray-350 dark:text-gray-700 stroke-[1.5]" />
                     <p className="text-xs">Select a lead from the list to view chat history</p>
