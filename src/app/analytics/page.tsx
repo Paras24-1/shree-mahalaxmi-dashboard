@@ -49,7 +49,7 @@ function AnalyticsContent() {
   const [allConversations, setAllConversations] = useState<any[]>([])
   const [allEmployees, setAllEmployees] = useState<any[]>([])
   const [allAssignments, setAllAssignments] = useState<any[]>([])
-  const [timeRange, setTimeRange] = useState<'today' | 'weekly' | 'monthly' | 'all'>('all')
+  const [timeRange, setTimeRange] = useState<'today' | 'weekly' | 'monthly' | 'all'>('weekly')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedConv, setSelectedConv] = useState<any | null>(null)
   const [messages, setMessages] = useState<any[]>([])
@@ -459,7 +459,7 @@ function AnalyticsContent() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Call Stats Summary Cards */}
               <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 h-fit">
-                {/* Total Leads Called */}
+                {/* Total Calls */}
                 <div 
                   onClick={() => setSelectedCategory('call_total')}
                   className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
@@ -468,12 +468,12 @@ function AnalyticsContent() {
                     <Phone className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-semibold">Total Leads Called</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{uniqueLeadsStats.totalLeads}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Total Voice Calls</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.total}</p>
                   </div>
                 </div>
 
-                {/* Leads Answered */}
+                {/* Calls Answered */}
                 <div 
                   onClick={() => setSelectedCategory('call_picked')}
                   className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
@@ -482,12 +482,12 @@ function AnalyticsContent() {
                     <Phone className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-semibold">Leads Answered</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{uniqueLeadsStats.pickedLeads}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Calls Answered</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.picked}</p>
                   </div>
                 </div>
 
-                {/* Leads Not Answered */}
+                {/* Calls Not Answered */}
                 <div 
                   onClick={() => setSelectedCategory('call_not_picked')}
                   className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm flex items-center gap-4 cursor-pointer hover:scale-[1.02] hover:shadow-md active:scale-[0.98] transition-all duration-200"
@@ -496,8 +496,8 @@ function AnalyticsContent() {
                     <Phone className="w-6 h-6 rotate-45" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-semibold">Leads Not Answered</p>
-                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{uniqueLeadsStats.notPickedLeads}</p>
+                    <p className="text-xs text-gray-500 font-semibold">Calls Not Answered</p>
+                    <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{activeCallStats.notPicked}</p>
                   </div>
                 </div>
               </div>

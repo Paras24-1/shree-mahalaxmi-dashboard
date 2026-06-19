@@ -128,6 +128,30 @@ export async function GET(request: Request) {
 
     const callLogsList: any[] = []
 
+    const trunkNumbers = ['8071583314', '918071583314']
+    const isSystemOrTrunk = (val: string | null | undefined, cleanVal: string) => {
+      if (!val) return true
+      const lower = val.toLowerCase()
+      if (
+        lower.includes('campaign') ||
+        lower.includes('outbound') ||
+        lower.includes('xml') ||
+        lower.includes('vobiz') ||
+        lower.includes('agent') ||
+        lower.includes('widget') ||
+        lower.includes('yash') ||
+        lower.includes('triman') ||
+        lower.includes('osmo') ||
+        lower.includes('noida')
+      ) {
+        return true
+      }
+      if (trunkNumbers.includes(cleanVal)) {
+        return true
+      }
+      return false
+    }
+
     // Loop through call logs and aggregate statistics
     if (callLogs) {
       for (const log of callLogs) {
@@ -137,16 +161,26 @@ export async function GET(request: Request) {
         const fromClean = log.from_phone_number ? log.from_phone_number.replace(/\D/g, '') : ''
         const toClean = log.to_phone_number ? log.to_phone_number.replace(/\D/g, '') : ''
 
-        // Check if caller or recipient is a customer
-        const isFromCustomer = fromClean.length >= 10 && !log.from_phone_number.includes('Campaign') && !log.from_phone_number.includes('Outbound')
-        const isToCustomer = toClean.length >= 10 && !log.to_phone_number.includes('Campaign') && !log.to_phone_number.includes('XML')
+        const fromIsSystem = isSystemOrTrunk(log.from_phone_number, fromClean)
+        const toIsSystem = isSystemOrTrunk(log.to_phone_number, toClean)
 
-        if (isFromCustomer) {
-          customerPhone = fromClean
-          direction = 'incoming'
-        } else if (isToCustomer) {
+        if (fromIsSystem && !toIsSystem) {
+          // Outbound call from system to customer
           customerPhone = toClean
           direction = 'outgoing'
+        } else if (!fromIsSystem && toIsSystem) {
+          // Inbound call from customer to system
+          customerPhone = fromClean
+          direction = 'incoming'
+        } else if (!fromIsSystem && !toIsSystem) {
+          // Fallback if neither is explicitly system, check if from is trunk
+          if (trunkNumbers.includes(fromClean)) {
+            customerPhone = toClean
+            direction = 'outgoing'
+          } else {
+            customerPhone = fromClean
+            direction = 'incoming'
+          }
         }
 
         // Determine which bucket this call belongs to (by CRM assignment or unassigned)
