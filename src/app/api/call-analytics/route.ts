@@ -54,10 +54,13 @@ export async function GET(request: Request) {
       }
     }
 
+    const voiceOrgId = process.env.VOICE_SAAS_ORGANIZATION_ID || '9bc1c153-e617-444a-81e1-f3951d4b386b'
+
     // 2. Fetch call logs from Voice SaaS database
     let logsQuery = queryClient
       .from('call_logs')
       .select('id, from_phone_number, to_phone_number, duration_seconds, status, created_at')
+      .eq('organization_id', voiceOrgId)
 
     if (hasFilter) {
       logsQuery = logsQuery.gte('created_at', dateFilter.toISOString())
