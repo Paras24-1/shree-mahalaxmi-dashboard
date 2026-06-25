@@ -236,8 +236,27 @@ export async function GET(request: Request) {
       }
     }
 
+    // Fetch wallet balance from organizations table in Voice SaaS database
+    let walletBalance = 0
+    try {
+      const { data: orgData, error: orgErr } = await queryClient
+        .from('organizations')
+        .select('wallet_balance')
+        .eq('id', voiceOrgId)
+        .maybeSingle()
+      
+      if (!orgErr && orgData) {
+        walletBalance = Number(orgData.wallet_balance) || 0
+      } else if (orgErr) {
+        console.error('[Call Analytics API] Error fetching wallet balance:', orgErr.message)
+      }
+    } catch (balanceErr: any) {
+      console.error('[Call Analytics API] Wallet fetch error:', balanceErr.message)
+    }
+
     // Format output payload
     const result = {
+      walletBalance,
       allTeam: {
         outgoing: 0,
         incoming: 0,
@@ -250,6 +269,7 @@ export async function GET(request: Request) {
       employees: [] as any[],
       callLogs: callLogsList
     }
+
 
     employeeStatsMap.forEach((stats, empId) => {
       if (empId !== unassignedKey) {

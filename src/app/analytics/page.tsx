@@ -422,9 +422,22 @@ function AnalyticsContent() {
             >
               <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Voice AI Call Activity</h1>
-              <p className="text-xs text-gray-550 dark:text-gray-400">Call outcomes and performance for the selected time range</p>
+            <div className="flex items-center gap-3">
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Voice AI Call Activity</h1>
+                <p className="text-xs text-gray-550 dark:text-gray-400">Call outcomes and performance for the selected time range</p>
+              </div>
+              {callAnalytics && callAnalytics.walletBalance !== undefined && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/40 text-violet-750 dark:text-violet-300 shadow-sm ml-2">
+                  <div className="relative flex h-2.5 w-2.5">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${callAnalytics.walletBalance > 0 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${callAnalytics.walletBalance > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                  </div>
+                  <span className="text-xs font-black font-mono">
+                    AI Wallet: ₹{Number(callAnalytics.walletBalance).toFixed(2)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
