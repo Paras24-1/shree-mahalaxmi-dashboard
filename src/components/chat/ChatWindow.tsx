@@ -9,9 +9,10 @@ import { Send, Bot, User, Loader2, Paperclip, X, Tag } from 'lucide-react'
 interface Props {
   conversation: Conversation | null
   onAIToggle: (id: string, mode: boolean) => void
+  onStageChange?: (id: string, stage: string) => void
 }
 
-export default function ChatWindow({ conversation, onAIToggle }: Props) {
+export default function ChatWindow({ conversation, onAIToggle, onStageChange }: Props) {
   const [input, setInput] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -156,6 +157,7 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
     if (!conversation) return
     setSavingStage(true)
     setStage(newStage)
+    onStageChange?.(conversation.id, newStage)
 
     await fetch(`/api/conversations/${conversation.id}`, {
       method: 'PATCH',

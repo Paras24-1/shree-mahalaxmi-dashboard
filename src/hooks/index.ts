@@ -75,14 +75,116 @@ export function useConversations(filters: {
           schema: 'public',
           table: 'conversations',
         },
-        () => fetchConversations()
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newConv = payload.new as Conversation
+            
+            // Check filters
+            let matches = true
+            if (filters.search) {
+              const s = filters.search.toLowerCase()
+              const nameMatch = newConv.name?.toLowerCase().includes(s) || false
+              const phoneMatch = newConv.phone_number?.toLowerCase().includes(s) || false
+              if (!nameMatch && !phoneMatch) matches = false
+            }
+            if (filters.stage) {
+              if (filters.stage === 'interested') {
+                if (!['interested', 'callback_done_by_ai'].includes(newConv.stage)) matches = false
+              } else {
+                if (newConv.stage !== filters.stage) matches = false
+              }
+            }
+            if (filters.unread && newConv.unread_count <= 0) {
+              matches = false
+            }
+            if (filters.userRole === 'employee' && filters.userId) {
+              if (newConv.assigned_to !== filters.userId) matches = false
+            } else if (
+              filters.userRole === 'admin' &&
+              filters.assignFilter &&
+              filters.assignFilter !== 'all'
+            ) {
+              if (filters.assignFilter === 'unassigned') {
+                if (newConv.assigned_to !== null) matches = false
+              } else if (filters.assignFilter === 'assigned') {
+                if (newConv.assigned_to === null) matches = false
+              } else {
+                if (newConv.assigned_to !== filters.assignFilter) matches = false
+              }
+            }
+
+            if (matches) {
+              setConversations((prev) => {
+                if (prev.some(c => c.id === newConv.id)) return prev
+                return [newConv, ...prev]
+              })
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedConv = payload.new as Conversation
+            
+            // Check filters
+            let matches = true
+            if (filters.search) {
+              const s = filters.search.toLowerCase()
+              const nameMatch = updatedConv.name?.toLowerCase().includes(s) || false
+              const phoneMatch = updatedConv.phone_number?.toLowerCase().includes(s) || false
+              if (!nameMatch && !phoneMatch) matches = false
+            }
+            if (filters.stage) {
+              if (filters.stage === 'interested') {
+                if (!['interested', 'callback_done_by_ai'].includes(updatedConv.stage)) matches = false
+              } else {
+                if (updatedConv.stage !== filters.stage) matches = false
+              }
+            }
+            if (filters.unread && updatedConv.unread_count <= 0) {
+              matches = false
+            }
+            if (filters.userRole === 'employee' && filters.userId) {
+              if (updatedConv.assigned_to !== filters.userId) matches = false
+            } else if (
+              filters.userRole === 'admin' &&
+              filters.assignFilter &&
+              filters.assignFilter !== 'all'
+            ) {
+              if (filters.assignFilter === 'unassigned') {
+                if (updatedConv.assigned_to !== null) matches = false
+              } else if (filters.assignFilter === 'assigned') {
+                if (updatedConv.assigned_to === null) matches = false
+              } else {
+                if (updatedConv.assigned_to !== filters.assignFilter) matches = false
+              }
+            }
+
+            setConversations((prev) => {
+              const exists = prev.some(c => c.id === updatedConv.id)
+              if (matches) {
+                if (exists) {
+                  return prev.map(c => c.id === updatedConv.id ? { ...c, ...updatedConv } : c)
+                } else {
+                  return [updatedConv, ...prev]
+                }
+              } else {
+                if (exists) {
+                  return prev.filter(c => c.id !== updatedConv.id)
+                }
+                return prev
+              }
+            })
+          } else if (payload.eventType === 'DELETE') {
+            const oldConv = payload.old as any
+            if (oldConv?.id) {
+              setConversations((prev) => prev.filter(c => c.id !== oldConv.id))
+            }
+          }
+        }
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [fetchConversations])
+  }, [fetchConversations, filters.search, filters.stage, filters.unread, filters.assignFilter, filters.userId, filters.userRole])
 
   return {
     conversations,

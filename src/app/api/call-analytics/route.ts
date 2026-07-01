@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     // 2. Fetch call logs from Voice SaaS database
     let logsQuery = queryClient
       .from('call_logs')
-      .select('id, from_phone_number, to_phone_number, duration_seconds, status, created_at')
+      .select('id, from_phone_number, to_phone_number, duration_seconds, status, created_at, recording_url')
       .eq('organization_id', voiceOrgId)
 
     if (hasFilter) {
@@ -229,7 +229,8 @@ export async function GET(request: Request) {
               status: log.status,
               isPicked: !isMissed,
               assignedTo,
-              createdAt: log.created_at
+              createdAt: log.created_at,
+              recordingUrl: log.recording_url || null
             })
           }
         }

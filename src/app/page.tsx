@@ -429,6 +429,12 @@ function DashboardContent() {
               if (selected?.id === id)
                 setSelected((prev) => prev ? { ...prev, ai_mode: mode } : null)
             }}
+            onStageChange={(id, newStage) => {
+              if (selected?.id === id) {
+                setSelected((prev) => prev ? { ...prev, stage: newStage } : null)
+                setLead((prev) => prev ? { ...prev, stage: newStage } : null)
+              }
+            }}
           />
         </div>
 
