@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Filter, CalendarDays, Clock, CheckSquare, ListTodo, StickyNote, FileText, Search, Moon, Sun, Bell } from 'lucide-react'
 
 export default function Topbar() {
@@ -15,19 +16,19 @@ export default function Topbar() {
     <header className="h-16 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 shrink-0">
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-          <button className="flex items-center gap-1 hover:text-orange-500 transition-colors"><Filter className="w-4 h-4 text-orange-500" /> Lead</button>
+          <Link href="/lead" className="flex items-center gap-1 hover:text-orange-500 transition-colors"><Filter className="w-4 h-4 text-orange-500" /> Lead</Link>
           <span className="text-gray-300">|</span>
-          <button className="flex items-center gap-1 hover:text-gray-900 transition-colors"><CalendarDays className="w-4 h-4 text-gray-400" /> Task</button>
+          <Link href="/task" className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"><CalendarDays className="w-4 h-4 text-gray-400" /> Task</Link>
           <span className="text-gray-300">|</span>
-          <button className="flex items-center gap-1 hover:text-red-500 transition-colors"><Clock className="w-4 h-4 text-red-500" /> Reminder</button>
+          <Link href="/reminder" className="flex items-center gap-1 hover:text-red-500 transition-colors"><Clock className="w-4 h-4 text-red-500" /> Reminder</Link>
           <span className="text-gray-300">|</span>
-          <button className="flex items-center gap-1 hover:text-orange-600 transition-colors"><CalendarDays className="w-4 h-4 text-orange-600" /> Meeting</button>
+          <Link href="/meeting" className="flex items-center gap-1 hover:text-orange-600 transition-colors"><CalendarDays className="w-4 h-4 text-orange-600" /> Meeting</Link>
           <span className="text-gray-300">|</span>
-          <button className="flex items-center gap-1 hover:text-blue-500 transition-colors"><ListTodo className="w-4 h-4 text-blue-500" /> To Do</button>
+          <Link href="/todo" className="flex items-center gap-1 hover:text-blue-500 transition-colors"><ListTodo className="w-4 h-4 text-blue-500" /> To Do</Link>
           <span className="text-gray-300">|</span>
-          <button className="flex items-center gap-1 hover:text-red-500 transition-colors"><StickyNote className="w-4 h-4 text-red-500" /> Note</button>
+          <Link href="/notes" className="flex items-center gap-1 hover:text-red-500 transition-colors"><StickyNote className="w-4 h-4 text-red-500" /> Note</Link>
           <span className="text-gray-300">|</span>
-          <button className="flex items-center gap-1 hover:text-orange-400 transition-colors"><FileText className="w-4 h-4 text-orange-400" /> Invoice</button>
+          <Link href="/invoice" className="flex items-center gap-1 hover:text-orange-400 transition-colors"><FileText className="w-4 h-4 text-orange-400" /> Invoice</Link>
           <span className="text-gray-300">|</span>
         </div>
       </div>
