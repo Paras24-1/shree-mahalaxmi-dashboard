@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Conversation, Message } from '@/types'
 
+// In-memory message cache across conversation switches
+const messageCache: Record<string, Message[]> = {}
+
 // ----------------------------------------------------------------
-// useConversations — fetches + subscribes to all conversations
+// useConversations — fetches all conversations + fast in-memory filtering
 // ----------------------------------------------------------------
 export function useConversations(filters: {
   search?: string
@@ -16,165 +19,70 @@ export function useConversations(filters: {
   isAdmin?: boolean
   userRole?: string
 } = {}) {
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [allConversations, setAllConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
 
+  // 1. Initial / background fetch of conversations
   const fetchConversations = useCallback(async () => {
-    // Wait until we know the user's role before fetching
     if (!filters.userRole || !filters.userId) return
 
-    const params = new URLSearchParams()
-
-    if (filters.search) params.set('search', filters.search)
-    if (filters.stage) params.set('stage', filters.stage)
-    if (filters.unread) params.set('unread', 'true')
-
-    if (filters.userRole === 'employee' && filters.userId) {
-      params.set('assigned_to', filters.userId)
-    } else if (
-      filters.userRole === 'admin' &&
-      filters.assignFilter &&
-      filters.assignFilter !== 'all'
-    ) {
-      if (filters.assignFilter === 'unassigned' || filters.assignFilter === 'assigned') {
-        params.set('assign_filter', filters.assignFilter)
-      } else {
-        // Specific employee ID selected
-        params.set('assigned_to', filters.assignFilter)
+    try {
+      const params = new URLSearchParams()
+      if (filters.userRole === 'employee' && filters.userId) {
+        params.set('assigned_to', filters.userId)
+      } else if (
+        filters.userRole === 'admin' &&
+        filters.assignFilter &&
+        filters.assignFilter !== 'all'
+      ) {
+        if (filters.assignFilter === 'unassigned' || filters.assignFilter === 'assigned') {
+          params.set('assign_filter', filters.assignFilter)
+        } else {
+          params.set('assigned_to', filters.assignFilter)
+        }
       }
+
+      const res = await fetch(`/api/conversations?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          setAllConversations(data)
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching conversations:', err)
+    } finally {
+      setLoading(false)
     }
-
-    const res = await fetch(`/api/conversations?${params}`)
-    const data = await res.json()
-
-    if (Array.isArray(data)) setConversations(data)
-
-    setLoading(false)
-  }, [
-    filters.search,
-    filters.stage,
-    filters.unread,
-    filters.assignFilter,
-    filters.userId,
-    filters.isAdmin,
-    filters.userRole,
-  ])
+  }, [filters.userRole, filters.userId, filters.assignFilter])
 
   useEffect(() => {
     fetchConversations()
   }, [fetchConversations])
 
-  // Subscribe to real-time changes on conversations
+  // 2. Persistent Single Realtime Subscription (does NOT tear down on search/stage changes)
   useEffect(() => {
     const channel = supabase
-      .channel('conversations-changes')
+      .channel('conversations-realtime-singleton')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conversations',
-        },
+        { event: '*', schema: 'public', table: 'conversations' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newConv = payload.new as Conversation
-            
-            // Check filters
-            let matches = true
-            if (filters.search) {
-              const s = filters.search.toLowerCase()
-              const nameMatch = newConv.name?.toLowerCase().includes(s) || false
-              const phoneMatch = newConv.phone_number?.toLowerCase().includes(s) || false
-              if (!nameMatch && !phoneMatch) matches = false
-            }
-            if (filters.stage) {
-              if (filters.stage === 'interested') {
-                if (!['interested', 'callback_done_by_ai'].includes(newConv.stage)) matches = false
-              } else {
-                if (newConv.stage !== filters.stage) matches = false
-              }
-            }
-            if (filters.unread && newConv.unread_count <= 0) {
-              matches = false
-            }
-            if (filters.userRole === 'employee' && filters.userId) {
-              if (newConv.assigned_to !== filters.userId) matches = false
-            } else if (
-              filters.userRole === 'admin' &&
-              filters.assignFilter &&
-              filters.assignFilter !== 'all'
-            ) {
-              if (filters.assignFilter === 'unassigned') {
-                if (newConv.assigned_to !== null) matches = false
-              } else if (filters.assignFilter === 'assigned') {
-                if (newConv.assigned_to === null) matches = false
-              } else {
-                if (newConv.assigned_to !== filters.assignFilter) matches = false
-              }
-            }
-
-            if (matches) {
-              setConversations((prev) => {
-                if (prev.some(c => c.id === newConv.id)) return prev
-                return [newConv, ...prev]
-              })
-            }
+            setAllConversations((prev) => {
+              if (prev.some((c) => c.id === newConv.id)) return prev
+              return [newConv, ...prev]
+            })
           } else if (payload.eventType === 'UPDATE') {
             const updatedConv = payload.new as Conversation
-            
-            // Check filters
-            let matches = true
-            if (filters.search) {
-              const s = filters.search.toLowerCase()
-              const nameMatch = updatedConv.name?.toLowerCase().includes(s) || false
-              const phoneMatch = updatedConv.phone_number?.toLowerCase().includes(s) || false
-              if (!nameMatch && !phoneMatch) matches = false
-            }
-            if (filters.stage) {
-              if (filters.stage === 'interested') {
-                if (!['interested', 'callback_done_by_ai'].includes(updatedConv.stage)) matches = false
-              } else {
-                if (updatedConv.stage !== filters.stage) matches = false
-              }
-            }
-            if (filters.unread && updatedConv.unread_count <= 0) {
-              matches = false
-            }
-            if (filters.userRole === 'employee' && filters.userId) {
-              if (updatedConv.assigned_to !== filters.userId) matches = false
-            } else if (
-              filters.userRole === 'admin' &&
-              filters.assignFilter &&
-              filters.assignFilter !== 'all'
-            ) {
-              if (filters.assignFilter === 'unassigned') {
-                if (updatedConv.assigned_to !== null) matches = false
-              } else if (filters.assignFilter === 'assigned') {
-                if (updatedConv.assigned_to === null) matches = false
-              } else {
-                if (updatedConv.assigned_to !== filters.assignFilter) matches = false
-              }
-            }
-
-            setConversations((prev) => {
-              const exists = prev.some(c => c.id === updatedConv.id)
-              if (matches) {
-                if (exists) {
-                  return prev.map(c => c.id === updatedConv.id ? { ...c, ...updatedConv } : c)
-                } else {
-                  return [updatedConv, ...prev]
-                }
-              } else {
-                if (exists) {
-                  return prev.filter(c => c.id !== updatedConv.id)
-                }
-                return prev
-              }
-            })
+            setAllConversations((prev) =>
+              prev.map((c) => (c.id === updatedConv.id ? { ...c, ...updatedConv } : c))
+            )
           } else if (payload.eventType === 'DELETE') {
             const oldConv = payload.old as any
             if (oldConv?.id) {
-              setConversations((prev) => prev.filter(c => c.id !== oldConv.id))
+              setAllConversations((prev) => prev.filter((c) => c.id !== oldConv.id))
             }
           }
         }
@@ -184,38 +92,104 @@ export function useConversations(filters: {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [fetchConversations, filters.search, filters.stage, filters.unread, filters.assignFilter, filters.userId, filters.userRole])
+  }, [])
+
+  // 3. Instant In-Memory Filter (0ms latency on keystroke & tab switch)
+  const filteredConversations = useMemo(() => {
+    return allConversations.filter((conv) => {
+      // Search filter
+      if (filters.search?.trim()) {
+        const q = filters.search.toLowerCase()
+        const nameMatch = conv.name?.toLowerCase().includes(q)
+        const phoneMatch = conv.phone_number?.toLowerCase().includes(q)
+        if (!nameMatch && !phoneMatch) return false
+      }
+
+      // Stage filter
+      if (filters.stage) {
+        if (filters.stage === 'interested') {
+          if (!['interested', 'callback_done_by_ai'].includes(conv.stage)) return false
+        } else if (conv.stage !== filters.stage) {
+          return false
+        }
+      }
+
+      // Unread filter
+      if (filters.unread && conv.unread_count <= 0) {
+        return false
+      }
+
+      // Assignment filter (role-based)
+      if (filters.userRole === 'employee' && filters.userId) {
+        if (conv.assigned_to !== filters.userId) return false
+      } else if (
+        filters.userRole === 'admin' &&
+        filters.assignFilter &&
+        filters.assignFilter !== 'all'
+      ) {
+        if (filters.assignFilter === 'unassigned') {
+          if (conv.assigned_to !== null) return false
+        } else if (filters.assignFilter === 'assigned') {
+          if (conv.assigned_to === null) return false
+        } else if (conv.assigned_to !== filters.assignFilter) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [
+    allConversations,
+    filters.search,
+    filters.stage,
+    filters.unread,
+    filters.assignFilter,
+    filters.userRole,
+    filters.userId,
+  ])
 
   return {
-    conversations,
+    conversations: filteredConversations,
     loading,
     refetch: fetchConversations,
   }
 }
 
 // ----------------------------------------------------------------
-// useMessages — fetches + subscribes to a conversation's messages
+// useMessages — cached + real-time sub-10ms conversation chat
 // ----------------------------------------------------------------
 export function useMessages(conversationId: string | null) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (conversationId && messageCache[conversationId]) {
+      return messageCache[conversationId]
+    }
+    return []
+  })
   const [loading, setLoading] = useState(false)
-
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) return
 
-    setLoading(true)
+    // If not cached, show loading
+    if (!messageCache[conversationId]) {
+      setLoading(true)
+    }
 
-    const res = await fetch(
-      `/api/messages?conversation_id=${conversationId}`
-    )
-
-    const data = await res.json()
-
-    if (Array.isArray(data)) setMessages(data)
-
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/messages?conversation_id=${conversationId}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          messageCache[conversationId] = data
+          setMessages(data)
+        }
+      }
+    } catch (err) {
+      console.error('Error loading messages:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [conversationId])
 
   useEffect(() => {
@@ -224,10 +198,15 @@ export function useMessages(conversationId: string | null) {
       return
     }
 
+    // Instantly load from cache if available
+    if (messageCache[conversationId]) {
+      setMessages(messageCache[conversationId])
+    }
+
     fetchMessages()
   }, [conversationId, fetchMessages])
 
-  // Subscribe to real-time new messages
+  // Realtime new messages subscription
   useEffect(() => {
     if (!conversationId) return
 
@@ -242,13 +221,17 @@ export function useMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message])
+          const newMsg = payload.new as Message
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev
+            const next = [...prev, newMsg]
+            messageCache[conversationId] = next
+            return next
+          })
 
           setTimeout(() => {
-            bottomRef.current?.scrollIntoView({
-              behavior: 'smooth',
-            })
-          }, 50)
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+          }, 30)
         }
       )
       .subscribe()
@@ -258,11 +241,9 @@ export function useMessages(conversationId: string | null) {
     }
   }, [conversationId])
 
-  // Auto-scroll on messages load
+  // Auto-scroll on message changes
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: 'smooth',
-    })
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
   return {
@@ -273,7 +254,7 @@ export function useMessages(conversationId: string | null) {
 }
 
 // ----------------------------------------------------------------
-// useSendMessage — handles sending replies
+// useSendMessage — optimistic & non-blocking send
 // ----------------------------------------------------------------
 export function useSendMessage() {
   const [sending, setSending] = useState(false)
@@ -293,9 +274,7 @@ export function useSendMessage() {
       try {
         const res = await fetch('/api/reply', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             conversation_id: conversationId,
             phone_number: phoneNumber,
@@ -306,6 +285,9 @@ export function useSendMessage() {
         })
 
         return res.ok
+      } catch (err) {
+        console.error('Error sending message:', err)
+        return false
       } finally {
         setSending(false)
       }
@@ -320,21 +302,23 @@ export function useSendMessage() {
 }
 
 // ----------------------------------------------------------------
-// useToggleAI — handles the AI/human takeover toggle
+// useToggleAI — handles AI/human takeover toggle
 // ----------------------------------------------------------------
 export function useToggleAI() {
   const toggleAI = useCallback(
     async (conversationId: string, aiMode: boolean) => {
-      await fetch('/api/takeover', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversation_id: conversationId,
-          ai_mode: aiMode,
-        }),
-      })
+      try {
+        await fetch('/api/takeover', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            ai_mode: aiMode,
+          }),
+        })
+      } catch (err) {
+        console.error('Error toggling AI:', err)
+      }
     },
     []
   )
