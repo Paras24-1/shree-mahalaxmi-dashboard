@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import {
   LayoutDashboard,
   Filter,
@@ -15,10 +16,22 @@ import {
   Users,
   FileText,
   Megaphone,
+  ChevronDown,
+  UserCheck,
+  BarChart3,
+  Circle,
 } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [invoiceOpen, setInvoiceOpen] = useState(true)
+  const [hrOpen, setHrOpen] = useState(false)
+
+  useEffect(() => {
+    if (pathname.startsWith('/invoice')) {
+      setInvoiceOpen(true)
+    }
+  }, [pathname])
 
   const navGroups = [
     {
@@ -44,14 +57,34 @@ export default function Sidebar() {
       title: 'BUSINESS',
       items: [
         { name: 'Customer', href: '/customer', icon: Users, color: 'text-orange-400' },
-        { name: 'Invoice', href: '/invoice', icon: FileText, color: 'text-orange-500' },
+        {
+          name: 'Invoice',
+          href: '/invoice',
+          icon: FileText,
+          color: 'text-orange-500',
+          subItems: [
+            { name: 'List', href: '/invoice' },
+            { name: 'Add', href: '/invoice/add' },
+            { name: 'Quotation', href: '/invoice/quotation' },
+            { name: 'Payment Method', href: '/invoice/payment-method' },
+            { name: 'Brochure', href: '/invoice/brochure' },
+          ],
+        },
         { name: 'Campaign', href: '/campaign', icon: Megaphone, color: 'text-purple-500' },
+      ],
+    },
+    {
+      title: 'TEAM OPERATIONS',
+      items: [
+        { name: 'HR', href: '/hr', icon: Users, color: 'text-orange-500' },
+        { name: 'Recruitment', href: '/recruitment', icon: UserCheck, color: 'text-blue-500' },
+        { name: 'Reports', href: '/reports', icon: BarChart3, color: 'text-cyan-500' },
       ],
     },
   ]
 
   return (
-    <aside className="w-64 h-full bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-y-auto">
+    <aside className="w-64 h-full bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-y-auto shrink-0">
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-auto px-1.5 h-8 bg-blue-900 rounded text-white flex items-center justify-center font-bold text-sm">
@@ -65,12 +98,68 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 px-4 py-2 space-y-6">
+      <nav className="flex-1 px-4 py-2 space-y-5">
         {navGroups.map((group) => (
           <div key={group.title}>
-            <h3 className="text-[11px] font-bold text-blue-900 mb-2">{group.title}</h3>
+            <h3 className="text-[11px] font-bold text-blue-900 dark:text-blue-400 mb-2 tracking-wider">{group.title}</h3>
             <ul className="space-y-1">
-              {group.items.map((item) => {
+              {group.items.map((item: any) => {
+                const hasSubItems = item.subItems && item.subItems.length > 0
+                const isGroupActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isOpen = item.name === 'Invoice' ? invoiceOpen : (item.name === 'HR' ? hrOpen : false)
+
+                if (hasSubItems) {
+                  return (
+                    <li key={item.name} className="space-y-1">
+                      <div
+                        onClick={() => {
+                          if (item.name === 'Invoice') setInvoiceOpen(!invoiceOpen)
+                          if (item.name === 'HR') setHrOpen(!hrOpen)
+                        }}
+                        className={`flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors ${
+                          isGroupActive && !isOpen
+                            ? 'bg-gradient-to-r from-blue-900 to-pink-500 text-white shadow-md'
+                            : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-850'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon className={`w-4 h-4 ${isGroupActive && !isOpen ? 'text-white' : item.color || 'text-gray-500'}`} />
+                          <span>{item.name}</span>
+                        </div>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                            isOpen ? 'rotate-180 text-gray-500' : 'text-gray-400'
+                          }`}
+                        />
+                      </div>
+
+                      {/* Sub-items menu */}
+                      {isOpen && (
+                        <ul className="pl-4 space-y-0.5 border-l-2 border-gray-100 dark:border-gray-800 ml-4 py-1">
+                          {item.subItems.map((sub: any) => {
+                            const isSubActive = pathname === sub.href
+                            return (
+                              <li key={sub.name}>
+                                <Link
+                                  href={sub.href}
+                                  className={`flex items-center gap-2.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    isSubActive
+                                      ? 'bg-gradient-to-r from-blue-900 to-pink-500 text-white shadow-sm font-bold'
+                                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800/60'
+                                  }`}
+                                >
+                                  <Circle className={`w-2 h-2 ${isSubActive ? 'fill-current text-white' : 'text-gray-400'}`} />
+                                  <span>{sub.name}</span>
+                                </Link>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  )
+                }
+
                 const isActive = pathname === item.href || (pathname === '/dashboard' && item.href === '/')
                 return (
                   <li key={item.name}>
