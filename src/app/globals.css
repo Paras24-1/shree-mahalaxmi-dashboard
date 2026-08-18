@@ -6,10 +6,12 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+    color-scheme: light;
   }
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
+    color-scheme: dark;
   }
   * {
     box-sizing: border-box;
@@ -18,10 +20,17 @@
     height: 100%;
     overflow: hidden;
   }
+  
+  /* Dark mode text and input defaults */
+  .dark select, .dark option {
+    background-color: #111827;
+    color: #f3f4f6;
+  }
+
   /* Custom scrollbar */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
   .dark ::-webkit-scrollbar-thumb { background: #374151; }
 }
 

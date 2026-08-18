@@ -23,8 +23,8 @@ export default function TodosWidget() {
   return (
     <div className="bg-white dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col min-h-[300px]">
       <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
-        <ListTodo className="w-5 h-5 text-blue-800" />
-        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">Todos</h3>
+        <ListTodo className="w-5 h-5 text-blue-800 dark:text-blue-400" />
+        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Todos</h3>
         
         <div className="ml-4 flex gap-2">
           {tabs.map(tab => {
@@ -35,8 +35,8 @@ export default function TodosWidget() {
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-1 text-xs font-semibold rounded-full transition-colors ${
                   activeTab === tab
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
               >
                 {tab} ({count})
@@ -50,16 +50,20 @@ export default function TodosWidget() {
         {filteredTodos.length > 0 ? (
           <ul className="space-y-2">
             {filteredTodos.map(todo => (
-              <li key={todo.id} className="p-3 border border-gray-100 dark:border-gray-800 rounded-lg flex items-center justify-between">
-                <span className="text-sm font-medium">{todo.title}</span>
-                <span className={`text-xs px-2 py-1 rounded-full ${todo.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+              <li key={todo.id} className="p-3 border border-gray-100 dark:border-gray-800 rounded-lg flex items-center justify-between bg-white dark:bg-gray-900">
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{todo.title}</span>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                  todo.status === 'completed'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-950/60 dark:text-green-300'
+                    : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                }`}>
                   {todo.status}
                 </span>
               </li>
             ))}
           </ul>
         ) : (
-          <div className="m-auto text-center opacity-30">
+          <div className="m-auto text-center opacity-30 text-gray-400 dark:text-gray-500">
             <ListTodo className="w-16 h-16 mx-auto mb-2" />
             <p className="text-sm font-bold">There Are No Todos to Display</p>
           </div>
