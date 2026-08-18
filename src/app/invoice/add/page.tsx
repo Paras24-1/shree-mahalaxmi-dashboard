@@ -21,7 +21,6 @@ import {
   Mail,
   Calendar,
   Percent,
-  Edit3,
 } from 'lucide-react'
 
 interface InvoiceItem {
@@ -31,14 +30,7 @@ interface InvoiceItem {
   amount: number
 }
 
-const GST_SLABS = [
-  { label: '0% (Exempt)', value: 0 },
-  { label: '3% (Precious Items)', value: 3 },
-  { label: '5% (Essential)', value: 5 },
-  { label: '12% (Standard Low)', value: 12 },
-  { label: '18% (Standard)', value: 18 },
-  { label: '28% (Luxury/Machinery)', value: 28 },
-]
+const GST_PRESETS = [0, 5, 12, 18, 28]
 
 export default function InvoiceAddPage() {
   const router = useRouter()
@@ -63,12 +55,10 @@ export default function InvoiceAddPage() {
     { name: 'Industrial Packaging Machine - Model A', qty: 1, rate: 45000, amount: 45000 },
   ])
 
-  // GST State
-  const [taxRate, setTaxRate] = useState<number>(18)
-  const [isCustomGst, setIsCustomGst] = useState(false)
-  const [gstType, setGstType] = useState<'igst' | 'cgst_sgst'>('igst')
-  const [discount, setDiscount] = useState(0)
-  const [paidAmount, setPaidAmount] = useState(0)
+  // Direct Editable GST State (defaults to 18%)
+  const [taxRate, setTaxRate] = useState<number | string>(18)
+  const [discount, setDiscount] = useState<number | string>(0)
+  const [paidAmount, setPaidAmount] = useState<number | string>(0)
 
   const [saving, setSaving] = useState(false)
   const [savedSuccess, setSavedSuccess] = useState(false)
@@ -94,8 +84,10 @@ export default function InvoiceAddPage() {
   }
 
   const subtotal = useMemo(() => items.reduce((acc, it) => acc + (it.amount || 0), 0), [items])
-  const taxAmount = useMemo(() => (subtotal * (Number(taxRate) || 0)) / 100, [subtotal, taxRate])
-  const totalAmount = useMemo(() => Math.max(0, subtotal + taxAmount - discount), [subtotal, taxAmount, discount])
+  const numericTaxRate = useMemo(() => Number(taxRate) || 0, [taxRate])
+  const numericDiscount = useMemo(() => Number(discount) || 0, [discount])
+  const taxAmount = useMemo(() => (subtotal * numericTaxRate) / 100, [subtotal, numericTaxRate])
+  const totalAmount = useMemo(() => Math.max(0, subtotal + taxAmount - numericDiscount), [subtotal, taxAmount, numericDiscount])
 
   const handleSave = async (andRedirect: boolean = true) => {
     if (!custName.trim()) {
@@ -116,11 +108,11 @@ export default function InvoiceAddPage() {
           issue_date: issueDate,
           due_date: dueDate,
           subtotal,
-          tax_rate: Number(taxRate) || 0,
+          tax_rate: numericTaxRate,
           tax_amount: taxAmount,
-          discount,
+          discount: numericDiscount,
           total_amount: totalAmount,
-          paid_amount: paidAmount,
+          paid_amount: Number(paidAmount) || 0,
           status,
           items,
           notes: notes.trim() || null,
@@ -160,7 +152,7 @@ export default function InvoiceAddPage() {
               <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
                 Create New Invoice
               </h1>
-              <p className="text-xs text-gray-500 font-medium">Generate tax invoice with customizable GST slabs</p>
+              <p className="text-xs text-gray-500 font-medium">Generate tax invoice with editable GST rate</p>
             </div>
           </div>
 
@@ -384,7 +376,7 @@ export default function InvoiceAddPage() {
             </div>
           </div>
 
-          {/* Section 4: Totals & Editable GST Slabs */}
+          {/* Section 4: Direct Editable GST & Calculations */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100 dark:border-gray-800">
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
@@ -399,7 +391,7 @@ export default function InvoiceAddPage() {
               />
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-850/60 p-5 rounded-2xl space-y-3.5 text-xs border border-gray-100 dark:border-gray-800">
+            <div className="bg-gray-50 dark:bg-gray-850/60 p-5 rounded-2xl space-y-3 text-xs border border-gray-100 dark:border-gray-800">
               <div className="flex justify-between text-gray-600 dark:text-gray-400">
                 <span>Subtotal:</span>
                 <span className="font-mono font-bold text-gray-900 dark:text-white">
@@ -407,81 +399,53 @@ export default function InvoiceAddPage() {
                 </span>
               </div>
 
-              {/* Editable GST Slab Section */}
-              <div className="p-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/80 space-y-2.5">
+              {/* Direct Editable GST Slab Box */}
+              <div className="p-3.5 bg-white dark:bg-gray-900 rounded-xl border-2 border-indigo-200 dark:border-indigo-800/80 space-y-2.5 shadow-2xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                    <Percent className="w-3.5 h-3.5 text-indigo-500" />
-                    GST Tax Slab:
+                    <Percent className="w-3.5 h-3.5 text-indigo-600" />
+                    GST Tax Slab Rate (%):
                   </span>
 
-                  {/* GST Slab Selector / Custom Toggle */}
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={isCustomGst ? 'custom' : taxRate}
-                      onChange={(e) => {
-                        if (e.target.value === 'custom') {
-                          setIsCustomGst(true)
-                        } else {
-                          setIsCustomGst(false)
-                          setTaxRate(Number(e.target.value))
-                        }
-                      }}
-                      className="px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-950 font-bold text-indigo-700 dark:text-indigo-300 outline-none"
-                    >
-                      {GST_SLABS.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                      <option value="custom">✏️ Edit Custom Slab %</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Custom Rate Input when Edit Custom Slab is active */}
-                {isCustomGst && (
-                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
-                    <span className="text-[11px] text-gray-500">Custom Slab %:</span>
+                  {/* Direct Editable Number Input */}
+                  <div className="flex items-center gap-1">
                     <input
                       type="number"
-                      step="0.1"
+                      step="any"
                       min="0"
                       max="100"
                       value={taxRate}
-                      onChange={(e) => setTaxRate(Number(e.target.value))}
-                      placeholder="e.g. 7.5"
-                      className="w-24 px-2 py-1 text-xs font-mono font-bold border border-indigo-300 dark:border-indigo-700 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 outline-none"
-                      autoFocus
+                      onChange={(e) => setTaxRate(e.target.value)}
+                      className="w-20 px-2.5 py-1.5 text-sm font-mono font-black text-right border-2 border-indigo-500 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-400"
                     />
-                    <span className="text-[11px] text-gray-400 font-bold">%</span>
+                    <span className="font-bold text-gray-500">%</span>
                   </div>
-                )}
+                </div>
 
-                {/* GST Breakdown (IGST vs CGST+SGST) */}
-                <div className="flex items-center justify-between text-[11px] pt-1 text-gray-500">
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="gstType"
-                        checked={gstType === 'igst'}
-                        onChange={() => setGstType('igst')}
-                        className="text-indigo-600"
-                      />
-                      <span>IGST ({taxRate}%)</span>
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="gstType"
-                        checked={gstType === 'cgst_sgst'}
-                        onChange={() => setGstType('cgst_sgst')}
-                        className="text-indigo-600"
-                      />
-                      <span>CGST + SGST ({(taxRate / 2).toFixed(1)}% + {(taxRate / 2).toFixed(1)}%)</span>
-                    </label>
+                {/* Quick Preset Buttons */}
+                <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800">
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Quick Slabs:</span>
+                  <div className="flex gap-1.5">
+                    {GST_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setTaxRate(preset)}
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                          Number(taxRate) === preset
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                        }`}
+                      >
+                        {preset}%
+                      </button>
+                    ))}
                   </div>
+                </div>
+
+                {/* Tax Amount Display */}
+                <div className="flex justify-between items-center text-[11px] pt-1 text-gray-500 font-medium">
+                  <span>Calculated GST Tax ({numericTaxRate}%):</span>
                   <span className="font-mono font-bold text-gray-900 dark:text-white">
                     ₹{taxAmount.toLocaleString()}
                   </span>
@@ -494,7 +458,7 @@ export default function InvoiceAddPage() {
                   type="number"
                   min="0"
                   value={discount}
-                  onChange={(e) => setDiscount(Number(e.target.value))}
+                  onChange={(e) => setDiscount(e.target.value)}
                   className="w-24 px-2 py-1 text-right font-mono border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white outline-none font-bold"
                 />
               </div>
