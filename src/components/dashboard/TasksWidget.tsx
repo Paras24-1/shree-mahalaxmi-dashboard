@@ -10,15 +10,31 @@ export default function TasksWidget() {
 
   useEffect(() => {
     async function loadTasks() {
-      const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false })
+      const { data } = await supabase.from('tasks').select('*').order('due_date', { ascending: true }).limit(20)
       if (data) setTasks(data)
     }
     loadTasks()
   }, [])
 
-  const tabs = ['Today', 'Tomorrow']
+  const tabs = ['Today', 'Tomorrow', 'All']
 
-  const filteredTasks = tasks.filter(t => t.due_date === activeTab.toLowerCase())
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`
+
+  const getFilteredTasks = (tab: string) => {
+    if (tab === 'Today') {
+      return tasks.filter(t => t.due_date === todayStr || (!t.due_date && t.created_at?.startsWith(todayStr)))
+    }
+    if (tab === 'Tomorrow') {
+      return tasks.filter(t => t.due_date === tomorrowStr)
+    }
+    return tasks
+  }
+
+  const filteredTasks = getFilteredTasks(activeTab)
 
   return (
     <div className="bg-white dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col min-h-[300px]">
@@ -28,7 +44,7 @@ export default function TasksWidget() {
         
         <div className="ml-4 flex gap-2">
           {tabs.map(tab => {
-            const count = tasks.filter(t => t.due_date === tab.toLowerCase()).length
+            const count = getFilteredTasks(tab).length
             return (
               <button
                 key={tab}

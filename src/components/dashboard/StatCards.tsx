@@ -26,27 +26,40 @@ export default function StatCards() {
       const yesterdayISO = startOfYesterday.toISOString()
 
       try {
-        // 1. TODAY'S LEADS: Only leads created today
-        const { count: todayLeadCount } = await supabase
-          .from('leads')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', todayISO)
+        // Run all queries simultaneously in parallel with Promise.all
+        const [
+          todayLeadsRes,
+          completedTodayLeadsRes,
+          yesterdayLeadsRes,
+          todayFollowupRes,
+          completedFollowupRes,
+          todayTaskRes,
+          completedTaskRes,
+          todayTodoRes,
+          completedTodoRes,
+        ] = await Promise.all([
+          // 1. Today's Leads count
+          supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
+          // 2. Completed today leads
+          supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', todayISO).in('stage', ['completed', 'booked', 'deal_done', 'won']),
+          // 3. Yesterday leads count
+          supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', yesterdayISO).lt('created_at', todayISO),
+          // 4. Today's followups
+          supabase.from('leads').select('*', { count: 'exact', head: true }).or(`followup_date.eq.${todayDateStr},followup_date.gte.${todayISO}`),
+          // 5. Completed followups
+          supabase.from('leads').select('*', { count: 'exact', head: true }).or(`followup_date.eq.${todayDateStr},followup_date.gte.${todayISO}`).eq('followup_notified', true),
+          // 6. Today's tasks
+          supabase.from('tasks').select('*', { count: 'exact', head: true }).or(`due_date.eq.${todayDateStr},created_at.gte.${todayISO}`),
+          // 7. Completed tasks
+          supabase.from('tasks').select('*', { count: 'exact', head: true }).or(`due_date.eq.${todayDateStr},created_at.gte.${todayISO}`).eq('status', 'completed'),
+          // 8. Today's todos
+          supabase.from('todos').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
+          // 9. Completed todos
+          supabase.from('todos').select('*', { count: 'exact', head: true }).gte('created_at', todayISO).eq('status', 'completed'),
+        ])
 
-        const { count: completedTodayLeads } = await supabase
-          .from('leads')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', todayISO)
-          .in('stage', ['completed', 'booked', 'deal_done', 'won'])
-
-        // Yesterday leads count for % change
-        const { count: yesterdayLeadCount } = await supabase
-          .from('leads')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', yesterdayISO)
-          .lt('created_at', todayISO)
-
-        const yCount = yesterdayLeadCount || 0
-        const tCount = todayLeadCount || 0
+        const yCount = yesterdayLeadsRes.count || 0
+        const tCount = todayLeadsRes.count || 0
         let leadIncrease = 0
         if (yCount === 0) {
           leadIncrease = tCount > 0 ? 100 : 0
@@ -54,59 +67,23 @@ export default function StatCards() {
           leadIncrease = Number((((tCount - yCount) / yCount) * 100).toFixed(2))
         }
 
-        // 2. TODAY'S FOLLOWUPS: Leads scheduled for followup today or schedules of type 'reminder'
-        const { count: todayFollowupCount } = await supabase
-          .from('leads')
-          .select('*', { count: 'exact', head: true })
-          .or(`followup_date.eq.${todayDateStr},followup_date.gte.${todayISO}`)
-
-        const { count: completedFollowups } = await supabase
-          .from('leads')
-          .select('*', { count: 'exact', head: true })
-          .or(`followup_date.eq.${todayDateStr},followup_date.gte.${todayISO}`)
-          .eq('followup_notified', true)
-
-        // 3. TODAY'S TASKS: Tasks due today or created today
-        const { count: todayTaskCount } = await supabase
-          .from('tasks')
-          .select('*', { count: 'exact', head: true })
-          .or(`due_date.eq.${todayDateStr},created_at.gte.${todayISO}`)
-
-        const { count: completedTodayTasks } = await supabase
-          .from('tasks')
-          .select('*', { count: 'exact', head: true })
-          .or(`due_date.eq.${todayDateStr},created_at.gte.${todayISO}`)
-          .eq('status', 'completed')
-
-        // 4. TODAY'S TODOS: Todos due today or created today
-        const { count: todayTodoCount } = await supabase
-          .from('todos')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', todayISO)
-
-        const { count: completedTodayTodos } = await supabase
-          .from('todos')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', todayISO)
-          .eq('status', 'completed')
-
         setStats({
           leads: {
             total: tCount,
-            completed: completedTodayLeads || 0,
+            completed: completedTodayLeadsRes.count || 0,
             increase: leadIncrease,
           },
           followups: {
-            total: todayFollowupCount || 0,
-            completed: completedFollowups || 0,
+            total: todayFollowupRes.count || 0,
+            completed: completedFollowupRes.count || 0,
           },
           tasks: {
-            total: todayTaskCount || 0,
-            completed: completedTodayTasks || 0,
+            total: todayTaskRes.count || 0,
+            completed: completedTaskRes.count || 0,
           },
           todos: {
-            total: todayTodoCount || 0,
-            completed: completedTodayTodos || 0,
+            total: todayTodoRes.count || 0,
+            completed: completedTodoRes.count || 0,
           },
         })
       } catch (err) {
