@@ -6,7 +6,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Shree Mahalaxmi CRM',
+  title: 'VoxAI CRM',
   description: 'WhatsApp CRM Dashboard',
 }
 

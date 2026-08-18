@@ -53,12 +53,11 @@ export default function Sidebar() {
   return (
     <aside className="w-64 h-full bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-y-auto">
       <div className="p-4 flex items-center justify-between">
-        {/* Logo Mock */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-900 rounded text-white flex items-center justify-center font-bold text-sm">
-            365
+          <div className="w-auto px-1.5 h-8 bg-blue-900 rounded text-white flex items-center justify-center font-bold text-sm">
+            Vox
           </div>
-          <span className="font-extrabold text-blue-900 text-xl tracking-tight">CRM</span>
+          <span className="font-extrabold text-blue-900 text-xl tracking-tight">AI</span>
           <span className="text-pink-500 font-bold ml-[-2px]">/</span>
         </div>
         <div className="w-6 h-6 border border-gray-300 rounded-full flex items-center justify-center cursor-pointer">

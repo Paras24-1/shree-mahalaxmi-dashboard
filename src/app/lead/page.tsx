@@ -11,7 +11,7 @@ export default function LeadPage() {
         <LeadHeader />
         <LeadBoard />
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-          <p className="text-xs text-gray-500 font-medium">COPYRIGHT © 2026 365 CRM, All rights Reserved</p>
+          <p className="text-xs text-gray-500 font-medium">COPYRIGHT © 2026 VoxAI, All rights Reserved</p>
         </div>
       </div>
     </DashboardLayout>
