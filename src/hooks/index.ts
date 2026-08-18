@@ -24,8 +24,6 @@ export function useConversations(filters: {
 
   // 1. Initial / background fetch of conversations
   const fetchConversations = useCallback(async () => {
-    if (!filters.userRole || !filters.userId) return
-
     try {
       const params = new URLSearchParams()
       if (filters.userRole === 'employee' && filters.userId) {
