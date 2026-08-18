@@ -1,24 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
-// GET /api/leads?conversation_id=xxx
+// GET /api/leads or /api/leads?conversation_id=xxx
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const conversationId = searchParams.get('conversation_id')
 
-    if (!conversationId) {
-      return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
+    if (conversationId) {
+      const { data, error } = await supabaseAdmin
+        .from('leads')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .maybeSingle()
+
+      if (error) throw error
+      return NextResponse.json(data || {})
+    } else {
+      const { data, error } = await supabaseAdmin
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return NextResponse.json(data || [])
     }
-
-    const { data, error } = await supabaseAdmin
-      .from('leads')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .maybeSingle()
-
-    if (error) throw error
-    return NextResponse.json(data || {})
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error }, { status: 500 })
