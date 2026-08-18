@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import LeadColumn from './LeadColumn'
 import LeadCard from './LeadCard'
+import { Plus, Search, Filter, RefreshCw, X, Check, FileText } from 'lucide-react'
 
 const COLUMNS = [
   { id: 'new', title: 'New', headerBg: 'bg-teal-700', colorClass: 'border-t-teal-700' },
@@ -13,78 +14,361 @@ const COLUMNS = [
   { id: 'cancel', title: 'Cancel', headerBg: 'bg-red-600', colorClass: 'border-t-red-600' },
 ]
 
+export function getLeadColumn(stage: string | undefined | null): string {
+  if (!stage) return 'new'
+  const s = stage.toLowerCase().trim()
+
+  if (['confirm', 'confirmed', 'completed', 'deal_done', 'booked', 'won'].includes(s)) {
+    return 'confirm'
+  }
+  if (['close_by', 'closeby', 'booking', 'proposal_sent', 'quotation', 'pricing'].includes(s)) {
+    return 'close_by'
+  }
+  if (['cancel', 'cancelled', 'not_interested', 'lost', 'rejected', 'junk'].includes(s)) {
+    return 'cancel'
+  }
+  if (
+    [
+      'processing',
+      'in_discussion',
+      'callback_done_by_ai',
+      'call_done',
+      'followup',
+      'interested',
+      'hot_customer',
+      'low_budget',
+      'not_connected',
+    ].includes(s)
+  ) {
+    return 'processing'
+  }
+  return 'new'
+}
+
 export default function LeadBoard() {
   const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showAddModal, setShowAddModal] = useState(false)
 
-  useEffect(() => {
-    fetchLeads()
-  }, [])
+  // New Lead form
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newCompany, setNewCompany] = useState('')
+  const [newSource, setNewSource] = useState('Face Book')
+  const [newStage, setNewStage] = useState('new')
+  const [savingLead, setSavingLead] = useState(false)
 
-  async function fetchLeads() {
+  const fetchLeads = useCallback(async () => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/leads')
-      const data = await res.json()
-      if (Array.isArray(data)) {
-        setLeads(data)
-      } else {
-        // Fallback if API returns single object or error
-        const { data: dbData } = await supabase.from('leads').select('*').order('created_at', { ascending: false })
-        if (dbData) setLeads(dbData)
+      // 1. Fetch leads table
+      const { data: dbLeads } = await supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      // 2. Also fetch conversations to ensure any lead from WhatsApp with a stage is included
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('id, name, phone_number, stage, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+
+      // Merge and deduplicate by phone/conversation_id
+      const leadMap = new Map<string, any>()
+
+      // First add conversations as baseline leads
+      if (convs) {
+        convs.forEach((c) => {
+          leadMap.set(c.id, {
+            id: c.id,
+            conversation_id: c.id,
+            name: c.name || c.phone_number,
+            phone_number: c.phone_number,
+            stage: c.stage || 'new',
+            source: 'WhatsApp CRM',
+            created_at: c.created_at || c.updated_at,
+          })
+        })
       }
+
+      // Merge rich lead entries
+      if (dbLeads) {
+        dbLeads.forEach((l) => {
+          const key = l.conversation_id || l.id
+          const existing = leadMap.get(key)
+          leadMap.set(key, {
+            ...existing,
+            ...l,
+            id: l.id || existing?.id,
+            stage: l.stage || existing?.stage || 'new',
+          })
+        })
+      }
+
+      setLeads(Array.from(leadMap.values()))
     } catch (err) {
-      console.error(err)
+      console.error('Error fetching leads:', err)
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
+    fetchLeads()
+  }, [fetchLeads])
+
+  // Move lead to new stage
+  const handleStageChange = async (leadId: string, targetStage: string) => {
+    // Optimistic UI update
+    setLeads((prev) =>
+      prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, stage: targetStage } : l))
+    )
+
+    try {
+      // Update in Supabase
+      await supabase.from('leads').update({ stage: targetStage }).or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
+      await supabase.from('conversations').update({ stage: targetStage }).eq('id', leadId)
+    } catch (err) {
+      console.error('Failed to update stage:', err)
+    }
   }
 
-  async function handleDrop(leadId: string, newStage: string) {
-    // Optimistic update
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage: newStage } : l))
-
-    // Determine the correct unique identifier to update. The leads table might use `id` or `conversation_id`.
-    // Let's use Supabase directly for simplicity and robustness since the API expects conversation_id
-    await supabase.from('leads').update({ stage: newStage }).eq('id', leadId)
-    // We should also sync it back to conversations table if needed, but that's handled by trigger or API.
+  const handleDelete = async (leadId: string) => {
+    if (!window.confirm('Delete this lead?')) return
+    setLeads((prev) => prev.filter((l) => l.id !== leadId && l.conversation_id !== leadId))
+    try {
+      await supabase.from('leads').delete().or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
+    } catch (err) {
+      console.error('Failed to delete lead:', err)
+    }
   }
 
-  async function handleDelete(leadId: string) {
-    if (!confirm('Are you sure you want to delete this lead?')) return
-    
-    // Optimistic update
-    setLeads(prev => prev.filter(l => l.id !== leadId))
-    await supabase.from('leads').delete().eq('id', leadId)
+  const handleCreateLead = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newName.trim() && !newPhone.trim()) return
+    setSavingLead(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .insert({
+          name: newName.trim(),
+          phone_number: newPhone.trim(),
+          company_name: newCompany.trim() || null,
+          source: newSource,
+          stage: newStage,
+        })
+        .select()
+        .single()
+
+      if (!error && data) {
+        setLeads((prev) => [data, ...prev])
+      } else {
+        await fetchLeads()
+      }
+
+      setShowAddModal(false)
+      setNewName('')
+      setNewPhone('')
+      setNewCompany('')
+    } catch (err) {
+      console.error('Error creating lead:', err)
+    } finally {
+      setSavingLead(false)
+    }
   }
 
-  if (loading) {
+  const filteredLeads = useMemo(() => {
+    if (!searchQuery.trim()) return leads
+    const q = searchQuery.toLowerCase()
+    return leads.filter(
+      (l) =>
+        (l.name && l.name.toLowerCase().includes(q)) ||
+        (l.phone_number && l.phone_number.includes(q)) ||
+        (l.company_name && l.company_name.toLowerCase().includes(q))
+    )
+  }, [leads, searchQuery])
+
+  if (loading && leads.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex-1 flex items-center justify-center py-24">
+        <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="flex-1 flex overflow-x-auto gap-4 pb-4">
-      {COLUMNS.map(col => {
-        const columnLeads = leads.filter(l => (l.stage || 'new') === col.id)
-        
-        return (
-          <LeadColumn
-            key={col.id}
-            title={col.title}
-            count={columnLeads.length}
-            headerBg={col.headerBg}
-            colorClass={col.colorClass}
-            onDrop={(leadId) => handleDrop(leadId, col.id)}
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Top Action Sub-bar */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search leads by name, phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 pr-7 py-1.5 text-xs border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48 sm:w-64"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
           >
-            {columnLeads.map(lead => (
-              <LeadCard key={lead.id} lead={lead} onDelete={handleDelete} />
-            ))}
-          </LeadColumn>
-        )
-      })}
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Lead</span>
+          </button>
+          <button
+            onClick={() => fetchLeads()}
+            className="p-1.5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 rounded-xl text-gray-600 dark:text-gray-400"
+            title="Refresh Leads"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* 5-Column Kanban Board */}
+      <div className="flex-1 flex overflow-x-auto gap-4 pb-4 min-h-[500px]">
+        {COLUMNS.map((col) => {
+          const columnLeads = filteredLeads.filter((l) => getLeadColumn(l.stage) === col.id)
+
+          return (
+            <LeadColumn
+              key={col.id}
+              title={col.title}
+              count={columnLeads.length}
+              headerBg={col.headerBg}
+              colorClass={col.colorClass}
+              onDrop={(leadId) => handleStageChange(leadId, col.id)}
+            >
+              {columnLeads.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-400 text-center">
+                  <span className="text-xs">No {col.title} Leads</span>
+                </div>
+              ) : (
+                columnLeads.map((lead) => (
+                  <LeadCard
+                    key={lead.id || lead.conversation_id}
+                    lead={lead}
+                    onDelete={handleDelete}
+                    onStageChange={handleStageChange}
+                  />
+                ))
+              )}
+            </LeadColumn>
+          )
+        })}
+      </div>
+
+      {/* Add Lead Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+              <h3 className="font-bold text-sm text-gray-900 dark:text-white">Create New Lead</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateLead} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Lead Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ramesh Patel"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="+91 98765 43210"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Company Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Shree Industries"
+                  value={newCompany}
+                  onChange={(e) => setNewCompany(e.target.value)}
+                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Source</label>
+                  <select
+                    value={newSource}
+                    onChange={(e) => setNewSource(e.target.value)}
+                    className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 outline-none font-semibold"
+                  >
+                    <option value="Face Book">Face Book</option>
+                    <option value="India Mart">India Mart</option>
+                    <option value="Google Ads">Google Ads</option>
+                    <option value="WhatsApp CRM">WhatsApp CRM</option>
+                    <option value="Referral">Referral</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">Initial Stage</label>
+                  <select
+                    value={newStage}
+                    onChange={(e) => setNewStage(e.target.value)}
+                    className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 outline-none font-semibold"
+                  >
+                    <option value="new">New</option>
+                    <option value="processing">Processing</option>
+                    <option value="close_by">Close-by</option>
+                    <option value="confirm">Confirm</option>
+                    <option value="cancel">Cancel</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingLead}
+                  className="flex-1 py-2.5 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl font-bold flex items-center justify-center gap-1.5"
+                >
+                  {savingLead ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Save Lead</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
