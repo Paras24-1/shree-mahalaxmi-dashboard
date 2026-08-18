@@ -1,29 +1,42 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, memo } from 'react'
 import { Conversation, Stage } from '@/types'
 import { useConversations } from '@/hooks'
-import { formatDistanceToNow } from 'date-fns'
-import { Search, Filter, Wifi, Trash2, X, UserPlus } from 'lucide-react'
+import { Search, Filter, Wifi, Trash2, X, UserPlus, Circle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
-const STAGES: Stage[] = ['new', 'callback_done_by_ai', 'interested', 'booking', 'confirmed', 'cancelled', 'completed', 'followup', 'not_interested', 'call_done', 'low_budget', 'hot_customer', 'not_connected']
+const STAGES: Stage[] = [
+  'new',
+  'callback_done_by_ai',
+  'interested',
+  'booking',
+  'confirmed',
+  'cancelled',
+  'completed',
+  'followup',
+  'not_interested',
+  'call_done',
+  'low_budget',
+  'hot_customer',
+  'not_connected',
+]
 
 const STAGE_COLORS: Record<Stage, string> = {
-  new:        'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  new: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
   callback_done_by_ai: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   interested: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-  booking:    'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  confirmed:  'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-  cancelled:  'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300',
-  completed:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  followup:      'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
-  not_interested:'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
-    call_done:      'bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300',
-  low_budget:  'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
-not_connected:  'bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300',
+  booking: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  confirmed: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  cancelled: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300',
+  completed: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  followup: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+  not_interested: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+  call_done: 'bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300',
+  low_budget: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  hot_customer: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+  not_connected: 'bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300',
 }
 
 interface Props {
@@ -38,47 +51,68 @@ interface Employee {
   email: string
 }
 
+function formatSimpleTime(dateStr: string) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d`
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
 export default function ConversationList({ selectedId, onSelect, onDelete }: Props) {
   const [search, setSearch] = useState('')
   const [stage, setStage] = useState('')
   const [unread, setUnread] = useState(false)
-  const [assignedFilter, setAssignedFilter] = useState<string>('all') // all, unassigned, assigned, or employee_id
+  const [assignedFilter, setAssignedFilter] = useState<string>('all')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
   const { profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  console.log('DEBUG:', { profile, isAdmin, role: profile?.role })
 
-
-
-  const { conversations, loading, refetch } = useConversations({ 
-  search, 
-  stage, 
-  unread,
-  assignFilter: assignedFilter,
-  userId: profile?.id,
-  isAdmin: !!isAdmin,
-  userRole: profile?.role,
-})
+  const { conversations, loading, refetch } = useConversations({
+    search,
+    stage,
+    unread,
+    assignFilter: assignedFilter,
+    userId: profile?.id,
+    isAdmin: !!isAdmin,
+    userRole: profile?.role,
+  })
 
   useEffect(() => {
     if (profile?.role === 'admin') {
-      fetchEmployees()
+      supabase
+        .from('users')
+        .select('id, name, email')
+        .eq('role', 'employee')
+        .order('name')
+        .then(({ data }) => {
+          if (data) setEmployees(data)
+        })
     }
   }, [profile])
 
-  const fetchEmployees = async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('id, name, email')
-      .eq('role', 'employee')
-      .order('name')
-    
-    if (data) setEmployees(data)
-  }
+  const employeeMap = useMemo(() => {
+    const map = new Map<string, Employee>()
+    employees.forEach((e) => map.set(e.id, e))
+    return map
+  }, [employees])
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    )
+  }, [conversations])
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     setConfirmId(id)
   }
@@ -98,7 +132,6 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     }
   }
 
-
   return (
     <aside className="flex flex-col h-full bg-white dark:bg-gray-950">
       {/* Confirm Delete Modal */}
@@ -112,7 +145,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
               </button>
             </div>
             <p className="text-xs text-gray-500 mb-4">
-              This will permanently delete the conversation and all messages. This cannot be undone.
+              This will permanently delete the conversation and all messages.
             </p>
             <div className="flex gap-2">
               <button
@@ -124,7 +157,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
               <button
                 onClick={confirmDelete}
                 disabled={deleting}
-                className="flex-1 px-3 py-2 text-xs rounded-xl bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 font-medium"
+                className="flex-1 px-3 py-2 text-xs rounded-xl bg-red-500 text-white hover:bg-red-600 font-medium"
               >
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
@@ -134,48 +167,39 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
       )}
 
       {/* Header */}
-      <div className="px-4 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
-        <div className="flex items-center justify-between mb-3">
-  <div>
-    <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-      {isAdmin ? 'All Conversations' : 'My Chats'}
-    </h1>
-    {!isAdmin && profile?.name && (
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        👤 {profile.name}
-      </p>
-    )}
-  </div>
-  <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-    <Wifi className="w-3 h-3" />
-    Live
-  </span>
-</div>
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+        <div className="flex items-center justify-between mb-2.5">
+          <h1 className="text-base font-bold text-gray-900 dark:text-white">
+            {isAdmin ? 'All Conversations' : 'My Chats'}
+          </h1>
+          <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+            <Wifi className="w-3 h-3 animate-pulse" /> Live
+          </span>
+        </div>
 
+        {/* Search */}
         <div className="relative mb-2">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by name or number..."
+            placeholder="Search name or number..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-gray-100 dark:bg-gray-850 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Filter className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-          
-          {/* Assignment Filter (Admin only) */}
-          {isAdmin && (
+        {/* Filters */}
+        <div className="flex items-center gap-1.5 flex-wrap text-xs">
+          {isAdmin && employees.length > 0 && (
             <select
               value={assignedFilter}
               onChange={(e) => setAssignedFilter(e.target.value)}
-              className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+              className="text-[11px] px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
             >
-              <option value="all">All chats</option>
+              <option value="all">All</option>
               <option value="unassigned">Unassigned</option>
-              <option value="assigned">All Assigned</option>
+              <option value="assigned">Assigned</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.name}
@@ -183,21 +207,23 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
               ))}
             </select>
           )}
-          
+
           <select
             value={stage}
             onChange={(e) => setStage(e.target.value)}
-            className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+            className="text-[11px] px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
           >
-            <option value="">All stages</option>
+            <option value="">All Stages</option>
             {STAGES.map((s) => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              <option key={s} value={s}>
+                {s.replace(/_/g, ' ')}
+              </option>
             ))}
           </select>
-          
+
           <button
             onClick={() => setUnread((u) => !u)}
-            className={`text-xs px-2 py-1 rounded-lg transition-colors ${
+            className={`text-[11px] px-2 py-0.5 rounded-lg transition-colors font-medium ${
               unread
                 ? 'bg-emerald-500 text-white'
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
@@ -209,220 +235,135 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <LoadingSkeleton />
-        ) : conversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm">
+      <div className="flex-1 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-900">
+        {loading && sortedConversations.length === 0 ? (
+          <div className="p-4 space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex gap-3 animate-pulse">
+                <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-800 shrink-0" />
+                <div className="flex-1 space-y-2 py-1">
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/2" />
+                  <div className="h-2 bg-gray-200 dark:bg-gray-800 rounded w-3/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : sortedConversations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-xs">
             <span>No conversations found</span>
           </div>
         ) : (
-          [...conversations]
-            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-            .map((conv) => (
-              <ConversationItem
-                key={conv.id}
-                conversation={conv}
-                isSelected={conv.id === selectedId}
-                onClick={() => onSelect(conv)}
-                onDelete={(e) => handleDelete(e, conv.id)}
-                isAdmin={isAdmin}
-                employees={employees}
-                onAssignmentChange={refetch}
-              />
-            ))
+          sortedConversations.map((conv) => (
+            <ConversationItem
+              key={conv.id}
+              conversation={conv}
+              isSelected={conv.id === selectedId}
+              onClick={() => onSelect(conv)}
+              onDelete={(e) => handleDelete(e, conv.id)}
+              isAdmin={!!isAdmin}
+              assignedEmployee={conv.assigned_to ? employeeMap.get(conv.assigned_to) : undefined}
+              onAssignmentChange={refetch}
+            />
+          ))
         )}
       </div>
     </aside>
   )
 }
 
-function ConversationItem({
+const ConversationItem = memo(function ConversationItem({
   conversation: conv,
   isSelected,
   onClick,
   onDelete,
   isAdmin,
-  employees,
-  onAssignmentChange,
+  assignedEmployee,
 }: {
   conversation: Conversation
   isSelected: boolean
   onClick: () => void
   onDelete: (e: React.MouseEvent) => void
   isAdmin: boolean
-  employees: Employee[]
+  assignedEmployee?: Employee
   onAssignmentChange: () => void
 }) {
-  const [hovered, setHovered] = useState(false)
-  const [showAssign, setShowAssign] = useState(false)
-  const [assigning, setAssigning] = useState(false)
-
   const initials = (conv.name || conv.phone_number || 'U')
-  .split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
 
-  const timeAgo = formatDistanceToNow(new Date(conv.updated_at), { addSuffix: true })
-
-  const assignedEmployee = employees.find(e => e.id === conv.assigned_to)
-
-  const handleAssign = async (e: React.MouseEvent, userId: string) => {
-    e.stopPropagation()
-    setAssigning(true)
-    
-    try {
-      const res = await fetch('/api/assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversation_id: conv.id,
-          assigned_to: userId
-        })
-      })
-
-      if (res.ok) {
-        onAssignmentChange()
-        setShowAssign(false)
-      }
-    } catch (err) {
-      console.error('Assignment failed:', err)
-    } finally {
-      setAssigning(false)
-    }
-  }
+  const timeAgo = formatSimpleTime(conv.updated_at)
 
   return (
     <div
-      className={`relative flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors border-b border-gray-50 dark:border-gray-900 ${
+      className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
         isSelected
-          ? 'bg-emerald-50 dark:bg-emerald-950/30 border-l-2 border-l-emerald-500'
-          : 'hover:bg-gray-50 dark:hover:bg-gray-900'
+          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-l-4 border-l-emerald-500'
+          : 'hover:bg-gray-50 dark:hover:bg-gray-900/60'
       }`}
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {/* Avatar */}
       <div className="relative shrink-0">
-        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white text-sm font-semibold">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white text-xs font-bold shadow-2xs">
           {initials}
         </div>
         {!conv.ai_mode && (
-          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-orange-400 border-2 border-white dark:border-gray-950" />
+          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white dark:border-gray-950" />
         )}
       </div>
 
-      {/* Content */}
+      {/* Details */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-0.5">
-          <span className={`text-sm font-medium truncate ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-900 dark:text-white'}`}>
-            {conv.name}
+          <span
+            className={`text-xs font-bold truncate ${
+              isSelected ? 'text-emerald-800 dark:text-emerald-300' : 'text-gray-900 dark:text-white'
+            }`}
+          >
+            {conv.name || conv.phone_number}
           </span>
-          <span className="text-xs text-gray-400 shrink-0 ml-2">{timeAgo}</span>
+          <span className="text-[10px] text-gray-400 shrink-0 ml-1 font-mono">{timeAgo}</span>
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 truncate mb-1">
-          {conv.phone_number}
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mb-1">
           {conv.last_message || 'No messages yet'}
         </p>
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          {conv.stage === 'callback_done_by_ai' ? (
-            <>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS.callback_done_by_ai}`}>
-                callback_done_by_ai
-              </span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS.interested}`}>
-                interested
-              </span>
-            </>
-          ) : (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS[conv.stage as Stage] || STAGE_COLORS.new}`}>
-              {conv.stage}
-            </span>
-          )}
-          
-          {/* Assignment Badge */}
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span
+            className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tight ${
+              STAGE_COLORS[conv.stage as Stage] || STAGE_COLORS.new
+            }`}
+          >
+            {conv.stage.replace(/_/g, ' ')}
+          </span>
+
           {assignedEmployee && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400">
-              → {assignedEmployee.name.split(' ')[0]}
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              {assignedEmployee.name.split(' ')[0]}
             </span>
           )}
-          {!assignedEmployee && isAdmin && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-              Unassigned
+
+          {conv.unread_count > 0 && (
+            <span className="ml-auto w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">
+              {conv.unread_count}
             </span>
           )}
         </div>
       </div>
 
-      {/* Actions */}
-      {hovered && (
-        <div className="flex items-center gap-1 shrink-0">
-          {isAdmin && !showAssign && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowAssign(true); }}
-              className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 hover:bg-blue-100 transition-colors"
-              title="Assign to employee"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-            </button>
-          )}
-          <button
-            onClick={onDelete}
-            className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-            title="Delete conversation"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Unread badge */}
-      {conv.unread_count > 0 && !hovered && (
-        <span className="shrink-0 min-w-[20px] h-5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
-          {conv.unread_count > 99 ? '99+' : conv.unread_count}
-        </span>
-      )}
-
-      {/* Assignment Dropdown */}
-      {showAssign && (
-        <div className="absolute right-2 top-2 z-10 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 min-w-[160px]">
-          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 px-2">Assign to:</p>
-          {employees.map((emp) => (
-            <button
-              key={emp.id}
-              onClick={(e) => handleAssign(e, emp.id)}
-              disabled={assigning}
-              className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
-            >
-              {emp.name}
-            </button>
-          ))}
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowAssign(false); }}
-            className="w-full mt-1 px-3 py-2 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-          >
-            Cancel
-          </button>
-        </div>
+      {isAdmin && (
+        <button
+          onClick={onDelete}
+          className="p-1 text-gray-300 hover:text-red-500 rounded opacity-0 hover:opacity-100 transition-opacity"
+          title="Delete"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       )}
     </div>
   )
-}
-
-function LoadingSkeleton() {
-  return (
-    <>
-      {[...Array(6)].map((_, i) => (
-        <div key={i} className="flex items-start gap-3 px-4 py-3.5 border-b border-gray-50 dark:border-gray-900">
-          <div className="w-11 h-11 rounded-full bg-gray-200 dark:bg-gray-800 animate-pulse shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-3/4" />
-            <div className="h-2.5 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-full" />
-            <div className="h-2.5 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-1/2" />
-          </div>
-        </div>
-      ))}
-    </>
-  )
-}
+})
