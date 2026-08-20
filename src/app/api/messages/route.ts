@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
+
 // GET /api/messages?conversation_id=xxx
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +32,13 @@ export async function GET(req: NextRequest) {
       .limit(200)
 
     if (error) throw error
-    return NextResponse.json(data)
+    return NextResponse.json(data || [], {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
+    })
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error }, { status: 500 })

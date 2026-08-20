@@ -8,57 +8,72 @@ import { Conversation, Message } from '@/types'
 const messageCache: Record<string, Message[]> = {}
 
 // ----------------------------------------------------------------
-// useConversations — fetches all conversations + fast in-memory filtering
+// useConversations — fetches all conversations + fast in-memory filtering + realtime + polling fallback
 // ----------------------------------------------------------------
-export function useConversations(filters: {
-  search?: string
-  stage?: string
-  unread?: boolean
-  assignFilter?: string
-  userId?: string
-  isAdmin?: boolean
-  userRole?: string
-} = {}) {
+export function useConversations(
+  filters: {
+    search?: string
+    stage?: string
+    unread?: boolean
+    assignFilter?: string
+    userId?: string
+    isAdmin?: boolean
+    userRole?: string
+  } = {}
+) {
   const [allConversations, setAllConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
 
   // 1. Initial / background fetch of conversations
-  const fetchConversations = useCallback(async () => {
-    try {
-      const params = new URLSearchParams()
-      if (filters.userRole === 'employee' && filters.userId) {
-        params.set('assigned_to', filters.userId)
-      } else if (
-        filters.userRole === 'admin' &&
-        filters.assignFilter &&
-        filters.assignFilter !== 'all'
-      ) {
-        if (filters.assignFilter === 'unassigned' || filters.assignFilter === 'assigned') {
-          params.set('assign_filter', filters.assignFilter)
-        } else {
-          params.set('assigned_to', filters.assignFilter)
+  const fetchConversations = useCallback(
+    async (silent = false) => {
+      try {
+        const params = new URLSearchParams()
+        if (filters.userRole === 'employee' && filters.userId) {
+          params.set('assigned_to', filters.userId)
+        } else if (
+          filters.userRole === 'admin' &&
+          filters.assignFilter &&
+          filters.assignFilter !== 'all'
+        ) {
+          if (filters.assignFilter === 'unassigned' || filters.assignFilter === 'assigned') {
+            params.set('assign_filter', filters.assignFilter)
+          } else {
+            params.set('assigned_to', filters.assignFilter)
+          }
         }
-      }
 
-      const res = await fetch(`/api/conversations?${params}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (Array.isArray(data)) {
-          setAllConversations(data)
+        const res = await fetch(`/api/conversations?${params.toString()}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data)) {
+            setAllConversations(data)
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching conversations:', err)
+      } finally {
+        if (!silent) {
+          setLoading(false)
         }
       }
-    } catch (err) {
-      console.error('Error fetching conversations:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [filters.userRole, filters.userId, filters.assignFilter])
+    },
+    [filters.userRole, filters.userId, filters.assignFilter]
+  )
 
   useEffect(() => {
     fetchConversations()
   }, [fetchConversations])
 
-  // 2. Persistent Single Realtime Subscription (does NOT tear down on search/stage changes)
+  // Periodic polling fallback (every 3.5s) to guarantee real-time updates even if WebSockets are blocked or dropped
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchConversations(true)
+    }, 3500)
+    return () => clearInterval(interval)
+  }, [fetchConversations])
+
+  // 2. Persistent Single Realtime Subscription
   useEffect(() => {
     const channelName = `conversations-realtime-${Date.now()}`
     const channel = supabase
@@ -70,7 +85,9 @@ export function useConversations(filters: {
           if (payload.eventType === 'INSERT') {
             const newConv = payload.new as Conversation
             setAllConversations((prev) => {
-              if (prev.some((c) => c.id === newConv.id)) return prev
+              if (prev.some((c) => c.id === newConv.id)) {
+                return prev.map((c) => (c.id === newConv.id ? { ...c, ...newConv } : c))
+              }
               return [newConv, ...prev]
             })
           } else if (payload.eventType === 'UPDATE') {
@@ -155,7 +172,7 @@ export function useConversations(filters: {
 }
 
 // ----------------------------------------------------------------
-// useMessages — cached + real-time sub-10ms conversation chat
+// useMessages — cached + real-time + polling fallback sub-10ms conversation chat
 // ----------------------------------------------------------------
 export function useMessages(conversationId: string | null) {
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -167,34 +184,59 @@ export function useMessages(conversationId: string | null) {
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const fetchMessages = useCallback(async () => {
-    if (!conversationId) return
+  const fetchMessages = useCallback(
+    async (silent = false) => {
+      if (!conversationId) return
 
-    // If not cached, show loading
-    if (!messageCache[conversationId]) {
-      setLoading(true)
-    }
+      // If not cached and not silent background poll, show loading
+      if (!silent && !messageCache[conversationId]) {
+        setLoading(true)
+      }
 
-    try {
-      const res = await fetch(`/api/messages?conversation_id=${conversationId}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (Array.isArray(data)) {
-          const sorted = [...data].sort(
-            (a, b) =>
-              new Date(a.timestamp || a.created_at).getTime() -
-              new Date(b.timestamp || b.created_at).getTime()
-          )
-          messageCache[conversationId] = sorted
-          setMessages(sorted)
+      try {
+        const res = await fetch(`/api/messages?conversation_id=${conversationId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data)) {
+            const sorted = [...data].sort(
+              (a, b) =>
+                new Date(a.timestamp || a.created_at).getTime() -
+                new Date(b.timestamp || b.created_at).getTime()
+            )
+
+            setMessages((prev) => {
+              const tempMsgs = prev.filter((m) => m.id.startsWith('temp-'))
+              // Prevent unnecessary state update if message IDs & count are identical
+              if (
+                tempMsgs.length === 0 &&
+                prev.length === sorted.length &&
+                prev[prev.length - 1]?.id === sorted[sorted.length - 1]?.id
+              ) {
+                return prev
+              }
+
+              // Combine sorted messages with pending temp messages
+              const merged = [...sorted]
+              for (const temp of tempMsgs) {
+                if (!merged.some((m) => m.message === temp.message && m.direction === temp.direction)) {
+                  merged.push(temp)
+                }
+              }
+              messageCache[conversationId] = merged
+              return merged
+            })
+          }
+        }
+      } catch (err) {
+        console.error('Error loading messages:', err)
+      } finally {
+        if (!silent) {
+          setLoading(false)
         }
       }
-    } catch (err) {
-      console.error('Error loading messages:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [conversationId])
+    },
+    [conversationId]
+  )
 
   useEffect(() => {
     if (!conversationId) {
@@ -202,7 +244,6 @@ export function useMessages(conversationId: string | null) {
       return
     }
 
-    // Instantly load from cache if available; otherwise reset to empty to avoid ghost messages from previous chat
     if (messageCache[conversationId]) {
       setMessages(messageCache[conversationId])
     } else {
@@ -210,6 +251,15 @@ export function useMessages(conversationId: string | null) {
     }
 
     fetchMessages()
+  }, [conversationId, fetchMessages])
+
+  // Polling fallback every 3.5s for the active chat
+  useEffect(() => {
+    if (!conversationId) return
+    const interval = setInterval(() => {
+      fetchMessages(true)
+    }, 3500)
+    return () => clearInterval(interval)
   }, [conversationId, fetchMessages])
 
   // Realtime new messages subscription
@@ -289,7 +339,7 @@ export function useMessages(conversationId: string | null) {
     [conversationId]
   )
 
-  // Auto-scroll on message changes
+  // Auto-scroll on message count changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
@@ -359,23 +409,20 @@ export function useSendMessage() {
 // useToggleAI — handles AI/human takeover toggle
 // ----------------------------------------------------------------
 export function useToggleAI() {
-  const toggleAI = useCallback(
-    async (conversationId: string, aiMode: boolean) => {
-      try {
-        await fetch('/api/takeover', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversation_id: conversationId,
-            ai_mode: aiMode,
-          }),
-        })
-      } catch (err) {
-        console.error('Error toggling AI:', err)
-      }
-    },
-    []
-  )
+  const toggleAI = useCallback(async (conversationId: string, aiMode: boolean) => {
+    try {
+      await fetch('/api/takeover', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          ai_mode: aiMode,
+        }),
+      })
+    } catch (err) {
+      console.error('Error toggling AI:', err)
+    }
+  }, [])
 
   return { toggleAI }
 }

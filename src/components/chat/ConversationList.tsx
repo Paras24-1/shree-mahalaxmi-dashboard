@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, memo } from 'react'
 import { Conversation, Stage } from '@/types'
 import { useConversations } from '@/hooks'
-import { Search, Filter, Wifi, Trash2, X, UserPlus, Circle } from 'lucide-react'
+import { Search, Filter, Wifi, Trash2, X, UserPlus, Circle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
@@ -75,6 +75,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [assignedFilter, setAssignedFilter] = useState<string>('all')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
   const { profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
@@ -88,6 +89,15 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     isAdmin: !!isAdmin,
     userRole: profile?.role,
   })
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await refetch()
+    } finally {
+      setTimeout(() => setRefreshing(false), 500)
+    }
+  }
 
   useEffect(() => {
     if (profile?.role === 'admin') {
@@ -174,9 +184,18 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
           <h1 className="text-base font-bold text-gray-900 dark:text-white">
             {isAdmin ? 'All Conversations' : 'My Chats'}
           </h1>
-          <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-            <Wifi className="w-3 h-3 animate-pulse" /> Live
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleManualRefresh}
+              title="Refresh conversations"
+              className="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-emerald-500' : ''}`} />
+            </button>
+            <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+              <Wifi className="w-3 h-3 animate-pulse" /> Live
+            </span>
+          </div>
         </div>
 
         {/* Search */}
@@ -290,11 +309,11 @@ const ConversationItem = memo(function ConversationItem({
   onAssignmentChange: () => void
 }) {
   const initials = (conv.name || conv.phone_number || 'U')
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+  .split(' ')
+  .map((n) => n[0])
+  .join('')
+  .toUpperCase()
+  .slice(0, 2)
 
   const timeAgo = formatSimpleTime(conv.updated_at)
 

@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const search       = searchParams.get('search')        || ''
-    const stage        = searchParams.get('stage')         || ''
-    const unread       = searchParams.get('unread')        === 'true'
-    const assignedTo   = searchParams.get('assigned_to')   || ''
+    const search = searchParams.get('search') || ''
+    const stage = searchParams.get('stage') || ''
+    const unread = searchParams.get('unread') === 'true'
+    const assignedTo = searchParams.get('assigned_to') || ''
     const assignFilter = searchParams.get('assign_filter') || ''
 
     let pageQuery = supabaseAdmin
       .from('conversations')
       .select('*')
-      .order('updated_at', { ascending: false })
+      .order('updated_at', { ascending: false, nullsFirst: false })
       .limit(300)
 
     // Employee: only their assigned chats
@@ -48,7 +50,13 @@ export async function GET(req: NextRequest) {
     const { data, error } = await pageQuery
     if (error) throw error
 
-    return NextResponse.json(data || [])
+    return NextResponse.json(data || [], {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
+    })
   } catch (err) {
     console.error('[conversations]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

@@ -15,10 +15,11 @@ build/
 .env.test.local
 .env.production.local
 
-# Debug
+# Debug & logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
 # Vercel
 .vercel
