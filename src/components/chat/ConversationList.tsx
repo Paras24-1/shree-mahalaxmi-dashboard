@@ -54,8 +54,10 @@ interface Employee {
 function formatSimpleTime(dateStr: string) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
   const now = new Date()
   const diffMs = now.getTime() - d.getTime()
+  if (diffMs < 0) return 'now'
   const mins = Math.floor(diffMs / 60000)
   if (mins < 1) return 'now'
   if (mins < 60) return `${mins}m`

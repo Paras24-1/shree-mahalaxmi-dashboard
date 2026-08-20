@@ -45,7 +45,7 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  const { messages, loading, bottomRef } = useMessages(conversation?.id || null)
+  const { messages, loading, bottomRef, addOptimisticMessage } = useMessages(conversation?.id || null)
   const { sendMessage, sending } = useSendMessage()
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,8 +85,17 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
   const handleSend = async () => {
     if (!conversation) return
     
+    const textToSend = input.trim()
+    const currentPreview = imagePreview
+    const currentFileType = imageFile?.type || null
     let mediaUrl = null
     let mediaType = null
+
+    if (!textToSend && !imageFile) return
+
+    // Clear input & previews early for instant snappy feel
+    setInput('')
+    handleRemoveImage()
 
     // Upload image if selected
     if (imageFile) {
@@ -107,10 +116,7 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
 
         const uploadData = await uploadRes.json()
         mediaUrl = uploadData.url
-        mediaType = imageFile.type
-
-        // Clear image after upload
-        handleRemoveImage()
+        mediaType = currentFileType
       } catch (err: any) {
         alert(err.message || 'Failed to upload image')
         setUploading(false)
@@ -119,24 +125,32 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
       setUploading(false)
     }
 
-    // Send message (text and/or image)
-    if (input.trim() || mediaUrl) {
-      const success = await sendMessage(
-        conversation.id,
-        conversation.phone_number,
-        input.trim(),
-        mediaUrl,
-        mediaType
-      )
-      
-      if (success) {
-        setInput('')
-      }
-    }
+    // Add optimistic message locally
+    const nowIso = new Date().toISOString()
+    addOptimisticMessage({
+      id: `temp-${Date.now()}`,
+      conversation_id: conversation.id,
+      phone_number: conversation.phone_number,
+      message: textToSend,
+      direction: 'outgoing',
+      timestamp: nowIso,
+      created_at: nowIso,
+      media_url: mediaUrl || currentPreview || null,
+      media_type: mediaType || currentFileType || null,
+    })
+
+    // Send message via API
+    await sendMessage(
+      conversation.id,
+      conversation.phone_number,
+      textToSend,
+      mediaUrl,
+      mediaType
+    )
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSend()
     }
@@ -168,6 +182,13 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
     setSavingStage(false)
   }
 
+  const formatMessageTime = (dateStr?: string) => {
+    if (!dateStr) return ''
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
   if (!conversation) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-950">
@@ -183,7 +204,7 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center justify-between shrink-0">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{conversation.name}</h2>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{conversation.name || conversation.phone_number}</h2>
           <p className="text-xs text-gray-500">{conversation.phone_number}</p>
         </div>
 
@@ -196,11 +217,11 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
               value={stage}
               onChange={(e) => handleStageChange(e.target.value)}
               disabled={savingStage}
-              className={`text-xs px-2 py-1 rounded-lg font-medium border-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer disabled:opacity-50 ${STAGE_COLORS[stage]}`}
+              className={`text-xs px-2 py-1 rounded-lg font-medium border-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer disabled:opacity-50 ${STAGE_COLORS[stage] || 'bg-gray-100 text-gray-600'}`}
             >
               {STAGES.map(s => (
                 <option key={s} value={s}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                  {s.replace(/_/g, ' ').charAt(0).toUpperCase() + s.replace(/_/g, ' ').slice(1)}
                 </option>
               ))}
             </select>
@@ -232,7 +253,7 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {loading ? (
+        {loading && messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
           </div>
@@ -241,38 +262,56 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
             No messages yet
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`max-w-[70%] ${msg.direction === 'outgoing' ? 'order-2' : 'order-1'}`}>
-                <div
-                  className={`rounded-2xl px-4 py-2 ${
-                    msg.direction === 'outgoing'
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
-                  }`}
-                >
-                  {msg.media_url && msg.media_type?.startsWith('image/') && (
-                    <img
-                      src={msg.media_url}
-                      alt="Sent image"
-                      className="rounded-lg mb-2 max-w-full h-auto"
-                    />
-                  )}
+          messages.map((msg) => {
+            const timeStr = formatMessageTime(msg.timestamp || msg.created_at)
+            const isImage = (msg.media_type?.startsWith('image/') || msg.media_url?.match(/\.(jpeg|jpg|gif|png|webp)/i))
 
-                  {msg.message && (
-                    <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
+            return (
+              <div
+                key={msg.id}
+                className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`max-w-[70%] ${msg.direction === 'outgoing' ? 'order-2' : 'order-1'}`}>
+                  <div
+                    className={`rounded-2xl px-4 py-2 shadow-2xs ${
+                      msg.direction === 'outgoing'
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    }`}
+                  >
+                    {msg.media_url && isImage && (
+                      <img
+                        src={msg.media_url}
+                        alt="Media attachment"
+                        className="rounded-lg mb-2 max-w-full h-auto max-h-72 object-contain"
+                      />
+                    )}
+
+                    {msg.media_url && !isImage && (
+                      <a
+                        href={msg.media_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline block text-xs mb-1 font-semibold"
+                      >
+                        📎 View Attachment
+                      </a>
+                    )}
+
+                    {msg.message && (
+                      <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
+                    )}
+                  </div>
+
+                  {timeStr && (
+                    <p className={`text-[10px] text-gray-400 mt-1 ${msg.direction === 'outgoing' ? 'text-right' : 'text-left'}`}>
+                      {timeStr}
+                    </p>
                   )}
                 </div>
-
-                <p className={`text-xs text-gray-400 mt-1 ${msg.direction === 'outgoing' ? 'text-right' : 'text-left'}`}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
 
         <div ref={bottomRef} />
@@ -328,7 +367,7 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             placeholder="Type a message... (Shift+Enter for new line)"
             rows={1}
             className="flex-1 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"

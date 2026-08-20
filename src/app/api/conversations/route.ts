@@ -30,7 +30,12 @@ export async function GET(req: NextRequest) {
       pageQuery = pageQuery.not('assigned_to', 'is', null)
     }
 
-    if (search) pageQuery = pageQuery.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
+    if (search) {
+      const cleanSearch = search.replace(/[,()"]/g, '').trim()
+      if (cleanSearch) {
+        pageQuery = pageQuery.or(`name.ilike.%${cleanSearch}%,phone_number.ilike.%${cleanSearch}%`)
+      }
+    }
     if (stage) {
       if (stage === 'interested') {
         pageQuery = pageQuery.in('stage', ['interested', 'callback_done_by_ai'])

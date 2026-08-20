@@ -42,6 +42,18 @@ export async function PATCH(
       .eq('id', id)
 
     if (error) throw error
+
+    // Sync stage and name to leads table if present
+    if (body.stage || body.name) {
+      await supabaseAdmin
+        .from('leads')
+        .update({
+          ...(body.stage ? { stage: body.stage } : {}),
+          ...(body.name ? { name: body.name } : {}),
+        })
+        .eq('conversation_id', id)
+    }
+
     return NextResponse.json({ success: true })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

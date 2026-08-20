@@ -80,6 +80,33 @@ function ChatContent() {
     selectConversationFromParam()
   }, [conversationIdParam])
 
+  // Sync selected conversation state with realtime updates
+  useEffect(() => {
+    if (!selected?.id) return
+
+    const channelName = `selected-conv-${selected.id}-${Date.now()}`
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversations',
+          filter: `id=eq.${selected.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as Conversation
+          setSelected((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev))
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [selected?.id])
+
   const handleLeadUpdate = (updates: Partial<Lead>) => {
     setLead((prev) => (prev ? { ...prev, ...updates } : null))
   }

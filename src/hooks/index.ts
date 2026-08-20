@@ -60,8 +60,9 @@ export function useConversations(filters: {
 
   // 2. Persistent Single Realtime Subscription (does NOT tear down on search/stage changes)
   useEffect(() => {
+    const channelName = `conversations-realtime-${Date.now()}`
     const channel = supabase
-      .channel('conversations-realtime-singleton')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'conversations' },
@@ -179,8 +180,13 @@ export function useMessages(conversationId: string | null) {
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data)) {
-          messageCache[conversationId] = data
-          setMessages(data)
+          const sorted = [...data].sort(
+            (a, b) =>
+              new Date(a.timestamp || a.created_at).getTime() -
+              new Date(b.timestamp || b.created_at).getTime()
+          )
+          messageCache[conversationId] = sorted
+          setMessages(sorted)
         }
       }
     } catch (err) {
@@ -196,9 +202,11 @@ export function useMessages(conversationId: string | null) {
       return
     }
 
-    // Instantly load from cache if available
+    // Instantly load from cache if available; otherwise reset to empty to avoid ghost messages from previous chat
     if (messageCache[conversationId]) {
       setMessages(messageCache[conversationId])
+    } else {
+      setMessages([])
     }
 
     fetchMessages()
@@ -208,8 +216,9 @@ export function useMessages(conversationId: string | null) {
   useEffect(() => {
     if (!conversationId) return
 
+    const channelName = `messages-${conversationId}-${Date.now()}`
     const channel = supabase
-      .channel(`messages-${conversationId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -222,7 +231,25 @@ export function useMessages(conversationId: string | null) {
           const newMsg = payload.new as Message
           setMessages((prev) => {
             if (prev.some((m) => m.id === newMsg.id)) return prev
-            const next = [...prev, newMsg]
+            // Replace any optimistic message with matching text and outgoing direction
+            const optIndex = prev.findIndex(
+              (m) =>
+                m.id.startsWith('temp-') &&
+                m.message === newMsg.message &&
+                m.direction === newMsg.direction
+            )
+            let next: Message[]
+            if (optIndex >= 0) {
+              next = [...prev]
+              next[optIndex] = newMsg
+            } else {
+              next = [...prev, newMsg]
+            }
+            next.sort(
+              (a, b) =>
+                new Date(a.timestamp || a.created_at).getTime() -
+                new Date(b.timestamp || b.created_at).getTime()
+            )
             messageCache[conversationId] = next
             return next
           })
@@ -239,6 +266,29 @@ export function useMessages(conversationId: string | null) {
     }
   }, [conversationId])
 
+  // Optimistically add an outgoing message to the local list & cache
+  const addOptimisticMessage = useCallback(
+    (msg: Message) => {
+      if (!conversationId) return
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev
+        const next = [...prev, msg]
+        next.sort(
+          (a, b) =>
+            new Date(a.timestamp || a.created_at).getTime() -
+            new Date(b.timestamp || b.created_at).getTime()
+        )
+        messageCache[conversationId] = next
+        return next
+      })
+
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 30)
+    },
+    [conversationId]
+  )
+
   // Auto-scroll on message changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -248,6 +298,8 @@ export function useMessages(conversationId: string | null) {
     messages,
     loading,
     bottomRef,
+    addOptimisticMessage,
+    refetch: fetchMessages,
   }
 }
 
@@ -265,7 +317,7 @@ export function useSendMessage() {
       mediaUrl?: string | null,
       mediaType?: string | null
     ) => {
-      if (!message.trim() && !mediaUrl) return false
+      if (!message.trim() && !mediaUrl) return null
 
       setSending(true)
 
@@ -282,10 +334,14 @@ export function useSendMessage() {
           }),
         })
 
-        return res.ok
+        if (res.ok) {
+          const data = await res.json()
+          return data
+        }
+        return null
       } catch (err) {
         console.error('Error sending message:', err)
-        return false
+        return null
       } finally {
         setSending(false)
       }
