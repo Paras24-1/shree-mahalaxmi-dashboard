@@ -11,25 +11,21 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || ''
     const stage = searchParams.get('stage') || ''
     const unread = searchParams.get('unread') === 'true'
-    const assignedTo = searchParams.get('assigned_to') || ''
     const assignFilter = searchParams.get('assign_filter') || ''
 
     let pageQuery = supabaseAdmin
       .from('conversations')
       .select('*')
       .order('updated_at', { ascending: false, nullsFirst: false })
-      .limit(300)
+      .limit(500)
 
-    // Employee: their assigned chats + new unassigned chats (so new chats are never hidden)
-    if (assignedTo) {
-      pageQuery = pageQuery.or(`assigned_to.eq.${assignedTo},assigned_to.is.null`)
-    }
-
-    // Admin assignment filter tabs
+    // Admin / user explicit assignment filter tabs
     if (assignFilter === 'unassigned') {
       pageQuery = pageQuery.is('assigned_to', null)
     } else if (assignFilter === 'assigned') {
       pageQuery = pageQuery.not('assigned_to', 'is', null)
+    } else if (assignFilter && assignFilter !== 'all') {
+      pageQuery = pageQuery.eq('assigned_to', assignFilter)
     }
 
     if (search) {

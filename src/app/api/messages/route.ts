@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('conversation_id', conversationId)
       .order('timestamp', { ascending: true })
-      .limit(200)
+      .limit(1000)
 
     if (error) throw error
     return NextResponse.json(data || [], {

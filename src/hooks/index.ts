@@ -29,18 +29,8 @@ export function useConversations(
     async (silent = false) => {
       try {
         const params = new URLSearchParams()
-        if (filters.userRole === 'employee' && filters.userId) {
-          params.set('assigned_to', filters.userId)
-        } else if (
-          filters.userRole === 'admin' &&
-          filters.assignFilter &&
-          filters.assignFilter !== 'all'
-        ) {
-          if (filters.assignFilter === 'unassigned' || filters.assignFilter === 'assigned') {
-            params.set('assign_filter', filters.assignFilter)
-          } else {
-            params.set('assigned_to', filters.assignFilter)
-          }
+        if (filters.assignFilter && filters.assignFilter !== 'all') {
+          params.set('assign_filter', filters.assignFilter)
         }
 
         const res = await fetch(`/api/conversations?${params.toString()}`)
@@ -58,7 +48,7 @@ export function useConversations(
         }
       }
     },
-    [filters.userRole, filters.userId, filters.assignFilter]
+    [filters.assignFilter]
   )
 
   useEffect(() => {
@@ -135,14 +125,8 @@ export function useConversations(
         return false
       }
 
-      // Assignment filter (role-based)
-      if (filters.userRole === 'employee' && filters.userId) {
-        if (conv.assigned_to && conv.assigned_to !== filters.userId) return false
-      } else if (
-        filters.userRole === 'admin' &&
-        filters.assignFilter &&
-        filters.assignFilter !== 'all'
-      ) {
+      // Explicit assignment filter (if user selected one from dropdown)
+      if (filters.assignFilter && filters.assignFilter !== 'all') {
         if (filters.assignFilter === 'unassigned') {
           if (conv.assigned_to !== null) return false
         } else if (filters.assignFilter === 'assigned') {
@@ -160,8 +144,6 @@ export function useConversations(
     filters.stage,
     filters.unread,
     filters.assignFilter,
-    filters.userRole,
-    filters.userId,
   ])
 
   return {
