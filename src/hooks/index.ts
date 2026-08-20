@@ -137,7 +137,7 @@ export function useConversations(
 
       // Assignment filter (role-based)
       if (filters.userRole === 'employee' && filters.userId) {
-        if (conv.assigned_to !== filters.userId) return false
+        if (conv.assigned_to && conv.assigned_to !== filters.userId) return false
       } else if (
         filters.userRole === 'admin' &&
         filters.assignFilter &&

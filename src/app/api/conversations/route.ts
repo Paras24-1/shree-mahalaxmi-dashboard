@@ -20,9 +20,9 @@ export async function GET(req: NextRequest) {
       .order('updated_at', { ascending: false, nullsFirst: false })
       .limit(300)
 
-    // Employee: only their assigned chats
+    // Employee: their assigned chats + new unassigned chats (so new chats are never hidden)
     if (assignedTo) {
-      pageQuery = pageQuery.eq('assigned_to', assignedTo)
+      pageQuery = pageQuery.or(`assigned_to.eq.${assignedTo},assigned_to.is.null`)
     }
 
     // Admin assignment filter tabs
@@ -57,8 +57,9 @@ export async function GET(req: NextRequest) {
         Expires: '0',
       },
     })
-  } catch (err) {
-    console.error('[conversations]', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+  } catch (err: any) {
+    console.error('[conversations error]', err)
+    const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
