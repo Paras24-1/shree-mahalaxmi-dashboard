@@ -3,12 +3,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, Users, MessageSquare, CheckCircle, Clock, TrendingUp, X, Loader2, Phone, UserPlus, Calendar, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Users, MessageSquare, CheckCircle, Clock, TrendingUp, X, Loader2, Phone, UserPlus, Calendar, AlertCircle, Coins } from 'lucide-react'
 import Link from 'next/link'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
-
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import CreditTopUpModal from '@/components/voice/CreditTopUpModal'
 
 interface EmployeeStats {
   id: string
@@ -76,6 +76,7 @@ function AnalyticsContent() {
   const [callAnalytics, setCallAnalytics] = useState<any>(null)
   const [loadingCalls, setLoadingCalls] = useState(false)
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all')
+  const [showTopUpModal, setShowTopUpModal] = useState(false)
 
   useEffect(() => {
     fetchCallAnalytics()
@@ -441,6 +442,14 @@ function AnalyticsContent() {
                   <span className="text-xs font-black font-mono">
                     AI Wallet: ₹{Number(callAnalytics.walletBalance).toFixed(2)}
                   </span>
+                  <button
+                    onClick={() => setShowTopUpModal(true)}
+                    className="ml-1 px-2.5 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 text-white rounded-lg text-[10px] font-bold shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                    title="Add AI Credits"
+                  >
+                    <Coins className="w-3 h-3" />
+                    <span>Top Up</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1142,6 +1151,18 @@ function AnalyticsContent() {
           </div>
         </div>
       )}
+
+      {/* Voice AI Credit Top-Up Modal */}
+      <CreditTopUpModal
+        isOpen={showTopUpModal}
+        onClose={() => setShowTopUpModal(false)}
+        currentBalance={callAnalytics?.walletBalance ?? 0}
+        onTopUpSuccess={(newBalance) => {
+          setCallAnalytics((prev: any) =>
+            prev ? { ...prev, walletBalance: newBalance } : { walletBalance: newBalance }
+          )
+        }}
+      />
     </div>
   )
 }
