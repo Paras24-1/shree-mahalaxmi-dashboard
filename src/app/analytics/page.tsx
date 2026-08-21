@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 
+import DashboardLayout from '@/components/layout/DashboardLayout'
+
 interface EmployeeStats {
   id: string
   name: string
@@ -53,9 +55,9 @@ const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444']
 
 export default function AnalyticsPage() {
   return (
-    <ProtectedRoute requireAdmin>
+    <DashboardLayout>
       <AnalyticsContent />
-    </ProtectedRoute>
+    </DashboardLayout>
   )
 }
 
@@ -353,10 +355,10 @@ function AnalyticsContent() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+      <div className="py-24 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Loading analytics...</p>
+          <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-xs font-semibold text-gray-500">Loading Voice AI Analytics...</p>
         </div>
       </div>
     )
@@ -364,8 +366,8 @@ function AnalyticsContent() {
 
   if (!stats) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-        <p className="text-gray-500">Failed to load analytics</p>
+      <div className="py-24 flex items-center justify-center">
+        <p className="text-xs font-semibold text-gray-500">Failed to load analytics</p>
       </div>
     )
   }
@@ -411,21 +413,24 @@ function AnalyticsContent() {
   })
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
+    <div className="flex flex-col space-y-6 pb-8">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
+      <div className="bg-white dark:bg-gray-950 rounded-2xl border border-gray-200 dark:border-gray-800 px-6 py-4 shadow-sm">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4 text-left">
             <Link
               href="/"
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors animate-pulse"
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </Link>
             <div className="flex items-center gap-3">
               <div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Voice AI Call Activity</h1>
-                <p className="text-xs text-gray-550 dark:text-gray-400">Call outcomes and performance for the selected time range</p>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Phone className="w-5 h-5 text-violet-500" />
+                  Voice AI Call Activity & Analytics
+                </h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Live call outcomes, recording playback, and performance metrics</p>
               </div>
               {callAnalytics && callAnalytics.walletBalance !== undefined && (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/40 text-violet-750 dark:text-violet-300 shadow-sm ml-2">
@@ -442,7 +447,7 @@ function AnalyticsContent() {
           </div>
 
           {/* Time Range Selector */}
-          <div className="flex items-center bg-gray-150 dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-700/50">
+          <div className="flex items-center bg-gray-100 dark:bg-gray-850 p-1 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-700/50">
             {[
               { id: 'today', label: 'Today' },
               { id: 'weekly', label: 'Weekly (7d)' },
@@ -463,10 +468,10 @@ function AnalyticsContent() {
             ))}
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+      <div className="space-y-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard

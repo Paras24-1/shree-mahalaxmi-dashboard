@@ -25,6 +25,7 @@ import {
   AlertCircle,
   ExternalLink,
   MessageSquare,
+  Mic,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -231,6 +232,7 @@ export default function Topbar() {
   }
 
   const navLinks = [
+    { name: 'Voice AI', href: '/analytics', icon: Mic, color: 'text-violet-500' },
     { name: 'Lead', href: '/lead', icon: Filter, color: 'text-orange-500' },
     { name: 'Task', href: '/task', icon: CalendarDays, color: 'text-gray-400' },
     { name: 'Reminder', href: '/reminder', icon: Clock, color: 'text-red-500' },

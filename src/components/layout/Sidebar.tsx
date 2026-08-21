@@ -20,6 +20,7 @@ import {
   UserCheck,
   BarChart3,
   Circle,
+  Mic,
 } from 'lucide-react'
 
 export default function Sidebar() {
@@ -38,6 +39,7 @@ export default function Sidebar() {
       title: 'MAIN',
       items: [
         { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+        { name: 'Voice AI', href: '/analytics', icon: Mic, color: 'text-violet-500' },
         { name: 'Lead', href: '/lead', icon: Filter, color: 'text-orange-500' },
         { name: 'Reminder', href: '/reminder', icon: Clock, color: 'text-red-500' },
         { name: 'Meeting', href: '/meeting', icon: CalendarDays, color: 'text-orange-600' },
