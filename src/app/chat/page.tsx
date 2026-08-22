@@ -59,17 +59,41 @@ function ChatContent() {
   }
 
   useEffect(() => {
-    if (!conversationIdParam) return
+    const targetId = searchParams?.get('conversation_id') || searchParams?.get('id')
+    const targetPhone = searchParams?.get('phone')
+
+    if (!targetId && !targetPhone) return
 
     const selectConversationFromParam = async () => {
       try {
-        const { data: conv, error } = await supabase
-          .from('conversations')
-          .select('*')
-          .eq('id', conversationIdParam)
-          .single()
+        let conv = null
 
-        if (conv && !error) {
+        // 1. Try finding by conversation id directly
+        if (targetId) {
+          const { data } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('id', targetId)
+            .maybeSingle()
+          if (data) conv = data
+        }
+
+        // 2. If not found by ID or if targetId was actually a lead record, search by phone
+        if (!conv && (targetPhone || targetId)) {
+          const rawPhone = targetPhone || targetId || ''
+          const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10)
+          if (cleanPhone) {
+            const { data } = await supabase
+              .from('conversations')
+              .select('*')
+              .ilike('phone_number', `%${cleanPhone}`)
+              .limit(1)
+              .maybeSingle()
+            if (data) conv = data
+          }
+        }
+
+        if (conv) {
           handleSelect(conv)
         }
       } catch (err) {
@@ -78,7 +102,7 @@ function ChatContent() {
     }
 
     selectConversationFromParam()
-  }, [conversationIdParam])
+  }, [searchParams])
 
   // Sync selected conversation state with realtime updates
   useEffect(() => {
