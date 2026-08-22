@@ -26,11 +26,16 @@ import {
   ExternalLink,
   MessageSquare,
   Mic,
+  Menu,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
-export default function Topbar() {
+interface TopbarProps {
+  onOpenSidebar?: () => void
+}
+
+export default function Topbar({ onOpenSidebar }: TopbarProps = {}) {
   const pathname = usePathname()
   const router = useRouter()
   const { profile, signOut } = useAuth()
@@ -244,10 +249,27 @@ export default function Topbar() {
 
   return (
     <>
-      <header className="h-16 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sm:px-6 shrink-0 z-20">
-        {/* Left Navigation Bar */}
-        <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-1 scrollbar-none">
-          <div className="flex items-center gap-2 sm:gap-3 text-xs font-semibold text-gray-600 dark:text-gray-400 whitespace-nowrap">
+      <header className="h-14 sm:h-16 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-3 sm:px-6 shrink-0 z-20 gap-2">
+        {/* Left Navigation & Mobile Menu */}
+        <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-1 scrollbar-none min-w-0">
+          {/* Mobile Hamburger Button */}
+          <button
+            type="button"
+            onClick={onOpenSidebar}
+            className="md:hidden p-2 -ml-1 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors shrink-0"
+            title="Open Navigation Menu"
+            aria-label="Open Navigation Menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          {/* Mobile Brand Name */}
+          <div className="flex items-center gap-1.5 md:hidden shrink-0">
+            <span className="font-extrabold text-blue-900 dark:text-blue-400 text-base tracking-tight">VoxAI</span>
+          </div>
+
+          {/* Quick Nav Links (Visible on Tablet/Desktop or Scrollable) */}
+          <div className="hidden sm:flex items-center gap-2 sm:gap-3 text-xs font-semibold text-gray-600 dark:text-gray-400 whitespace-nowrap">
             {navLinks.map((link, idx) => {
               const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
               return (
@@ -271,11 +293,11 @@ export default function Topbar() {
         </div>
 
         {/* Right Icon Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 ml-2">
+        <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
           {/* Quick Task Button */}
           <button
             onClick={() => setShowQuickTaskModal(true)}
-            className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-xl transition-colors"
+            className="hidden sm:flex p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-xl transition-colors"
             title="Create Quick Task"
           >
             <CheckSquare className="w-4 h-4" />
@@ -284,7 +306,7 @@ export default function Topbar() {
           {/* Quick Note Button */}
           <button
             onClick={() => setShowQuickNoteModal(true)}
-            className="p-2 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-xl transition-colors"
+            className="hidden sm:flex p-2 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-xl transition-colors"
             title="Create Quick Note"
           >
             <StickyNote className="w-4 h-4" />

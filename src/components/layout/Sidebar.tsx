@@ -23,7 +23,12 @@ import {
   Mic,
 } from 'lucide-react'
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const [invoiceOpen, setInvoiceOpen] = useState(true)
   const [hrOpen, setHrOpen] = useState(false)
@@ -85,8 +90,8 @@ export default function Sidebar() {
     },
   ]
 
-  return (
-    <aside className="w-64 h-full bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-y-auto shrink-0">
+  const content = (
+    <div className="flex flex-col h-full overflow-y-auto bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800">
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-auto px-1.5 h-8 bg-blue-900 rounded text-white flex items-center justify-center font-bold text-sm">
@@ -95,8 +100,22 @@ export default function Sidebar() {
           <span className="font-extrabold text-blue-900 text-xl tracking-tight">AI</span>
           <span className="text-pink-500 font-bold ml-[-2px]">/</span>
         </div>
-        <div className="w-6 h-6 border border-gray-300 rounded-full flex items-center justify-center cursor-pointer">
-          <span className="text-gray-500 text-xs">◎</span>
+        <div className="flex items-center gap-1">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+              title="Close Menu"
+              aria-label="Close Menu"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+          <div className="w-6 h-6 border border-gray-300 rounded-full hidden md:flex items-center justify-center cursor-pointer">
+            <span className="text-gray-500 text-xs">◎</span>
+          </div>
         </div>
       </div>
 
@@ -144,6 +163,7 @@ export default function Sidebar() {
                               <li key={sub.name}>
                                 <Link
                                   href={sub.href}
+                                  onClick={() => onClose?.()}
                                   className={`flex items-center gap-2.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                                     isSubActive
                                       ? 'bg-gradient-to-r from-blue-900 to-pink-500 text-white shadow-sm font-bold'
@@ -167,6 +187,7 @@ export default function Sidebar() {
                   <li key={item.name}>
                     <Link
                       href={item.href}
+                      onClick={() => onClose?.()}
                       className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
                         isActive
                           ? 'bg-gradient-to-r from-blue-900 to-pink-500 text-white font-medium shadow-md'
@@ -186,8 +207,32 @@ export default function Sidebar() {
 
       <div className="p-4 mt-auto border-t border-gray-100 dark:border-gray-800">
         <p className="text-xs font-bold text-red-600">Platinum : 364 Days Left</p>
-        <button className="text-xs text-blue-800 hover:underline mt-1">click to upgrade</button>
+        <button className="text-xs text-blue-800 dark:text-blue-400 hover:underline mt-1">click to upgrade</button>
       </div>
-    </aside>
+    </div>
+  )
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-64 h-full shrink-0 flex-col">
+        {content}
+      </aside>
+
+      {/* Mobile Drawer */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          {/* Backdrop */}
+          <div
+            onClick={onClose}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300"
+          />
+          {/* Slide-in Drawer */}
+          <aside className="relative w-72 max-w-[85vw] h-full z-10 shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+            {content}
+          </aside>
+        </div>
+      )}
+    </>
   )
 }

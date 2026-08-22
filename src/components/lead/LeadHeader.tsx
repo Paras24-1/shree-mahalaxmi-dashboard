@@ -4,8 +4,8 @@ import { Search, FileText, ChevronDown, Plus, MoreVertical, SlidersHorizontal, L
 
 export default function LeadHeader() {
   return (
-    <div className="flex items-center justify-between py-4 mb-4">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Leads</h2>
+    <div className="flex items-center justify-between py-2 sm:py-4 mb-2 sm:mb-4 flex-wrap gap-2">
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Leads</h2>
       
       <div className="flex items-center gap-3">
         {/* Reports Dropdown */}

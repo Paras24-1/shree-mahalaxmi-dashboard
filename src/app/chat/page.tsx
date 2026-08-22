@@ -119,7 +119,7 @@ function ChatContent() {
   }
 
   return (
-    <div className="h-[calc(100vh-115px)] flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+    <div className="h-[calc(100dvh-5.5rem)] md:h-[calc(100vh-115px)] flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
       {/* Mobile Sub-Header for switching between views */}
       <div className="md:hidden flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-850 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-2">
