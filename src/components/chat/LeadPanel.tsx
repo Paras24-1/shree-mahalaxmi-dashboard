@@ -2,7 +2,30 @@
 
 import React, { useState, useEffect } from 'react'
 import { Conversation, Lead, LeadActivity } from '@/types'
-import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save, Calendar, Clock, Trash2, X, Plus, Check, Edit2 } from 'lucide-react'
+import {
+  RefreshCw,
+  Phone,
+  User,
+  Target,
+  MapPin,
+  Wrench,
+  Star,
+  CheckCircle,
+  MessageSquare,
+  TrendingUp,
+  StickyNote,
+  Save,
+  Calendar,
+  Clock,
+  Trash2,
+  X,
+  Plus,
+  Check,
+  Edit2,
+  Sparkles,
+  ArrowRight,
+  Copy,
+} from 'lucide-react'
 
 // Helper to clean, parse, and split call transcripts into structured speech bubbles, skipping debug logs
 const parseTranscript = (transcriptText: string) => {
@@ -55,6 +78,54 @@ const parseTranscript = (transcriptText: string) => {
   return messages;
 };
 
+// Helper to compute realistic dynamic lead score if not explicitly set
+const computeLeadScore = (data: any, conversation?: Conversation | null): { score: number; label: string; color: string } => {
+  const explicit = Number(data?.lead_score)
+  let score = !isNaN(explicit) && explicit > 0 ? explicit : 0
+
+  if (score === 0) {
+    const stage = (conversation?.stage || data?.stage || 'new').toLowerCase()
+    score = 50
+    if (['hot_customer', 'confirmed', 'completed', 'booking'].includes(stage)) {
+      score = 88
+    } else if (['interested', 'callback_done_by_ai'].includes(stage)) {
+      score = 78
+    } else if (['call_done', 'followup'].includes(stage)) {
+      score = 65
+    } else if (['new'].includes(stage)) {
+      score = 52
+    } else if (['low_budget'].includes(stage)) {
+      score = 35
+    } else if (['not_connected'].includes(stage)) {
+      score = 25
+    } else if (['not_interested', 'cancelled'].includes(stage)) {
+      score = 15
+    }
+
+    const quality = (data?.lead_quality || '').toLowerCase()
+    if (quality.includes('high') || quality.includes('hot')) score += 10
+    else if (quality.includes('medium') || quality.includes('warm')) score += 5
+    else if (quality.includes('low') || quality.includes('cold')) score -= 10
+
+    if (data?.machine_interest && data.machine_interest.trim()) score += 5
+    if (data?.callback_ready && String(data.callback_ready).toLowerCase() === 'yes') score += 5
+
+    score = Math.max(10, Math.min(98, score))
+  }
+
+  let label = 'Warm Lead'
+  let color = 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50'
+  if (score >= 75) {
+    label = 'Hot Lead'
+    color = 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
+  } else if (score < 50) {
+    label = 'Cold / Fresh Lead'
+    color = 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800'
+  }
+
+  return { score, label, color }
+}
+
 export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   conversation: Conversation | null
   lead: Lead | null
@@ -86,6 +157,51 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   const [activityNotes, setActivityNotes] = useState('')
   const [savingActivity, setSavingActivity] = useState(false)
   const [editingActivity, setEditingActivity] = useState<LeadActivity | null>(null)
+
+  // AI Chat Summary state
+  const [summaryData, setSummaryData] = useState<any | null>(null)
+  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [copiedSummary, setCopiedSummary] = useState(false)
+
+  const fetchSummary = async (force = false) => {
+    if (!conversation?.id) return
+    setLoadingSummary(true)
+    try {
+      const res = await fetch(`/api/summary?conversation_id=${conversation.id}&t=${Date.now()}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.summary) {
+          setSummaryData(json.summary)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch summary in LeadPanel:', err)
+    } finally {
+      setLoadingSummary(false)
+    }
+  }
+
+  useEffect(() => {
+    if (conversation?.id) {
+      fetchSummary()
+    } else {
+      setSummaryData(null)
+    }
+  }, [conversation?.id])
+
+  const handleCopySummary = () => {
+    if (!summaryData) return
+    const text = `📋 Chat Summary for ${data.Name || conversation?.name || data.Phone || conversation?.phone_number}:
+• Intent: ${summaryData.intent}
+• Overview: ${summaryData.overview}
+• Key Points:
+${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
+• Next Action: ${summaryData.nextAction}`
+
+    navigator.clipboard.writeText(text)
+    setCopiedSummary(true)
+    setTimeout(() => setCopiedSummary(false), 2000)
+  }
 
   const fetchActivities = async (leadId: string) => {
     setLoadingActivities(true)
@@ -490,11 +606,152 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
 
             <InfoCard icon={Phone} label="Phone Number" value={data.Phone} />
             <InfoCard icon={User} label="Name" value={data.Name} />
+
+            {/* Lead Score Card with Dynamic Score & Progress Bar */}
+            {(() => {
+              const { score, label, color } = computeLeadScore(data, conversation)
+              return (
+                <div className="p-3.5 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-emerald-200 dark:hover:border-emerald-900 transition-colors space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                        <TrendingUp className="w-3.5 h-3.5" />
+                      </div>
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Lead Score</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${color}`}>
+                      {label}
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline justify-between">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl font-bold text-gray-900 dark:text-white">{score}</span>
+                      <span className="text-xs text-gray-400 font-medium">/ 100</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-medium">
+                      {score >= 75 ? 'High Conversion Intent' : score >= 50 ? 'Medium Engagement' : 'Cold / Fresh Lead'}
+                    </span>
+                  </div>
+
+                  {/* Mini Progress Bar */}
+                  <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        score >= 75
+                          ? 'bg-emerald-500'
+                          : score >= 50
+                          ? 'bg-amber-500'
+                          : 'bg-slate-400'
+                      }`}
+                      style={{ width: `${score}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* AI Chat Summary Section — right side after Lead Score */}
+            <div className="p-4 bg-gradient-to-br from-purple-50/80 via-indigo-50/40 to-blue-50/60 dark:from-gray-900 dark:via-purple-950/20 dark:to-gray-900 rounded-2xl border border-purple-100 dark:border-purple-900/40 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">Chat Summary</p>
+                    {summaryData?.intent && (
+                      <span className="text-[10px] text-purple-700 dark:text-purple-300 font-semibold">
+                        {summaryData.intent}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => fetchSummary(true)}
+                    disabled={loadingSummary}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-purple-700 dark:text-gray-400 hover:bg-white/80 dark:hover:bg-gray-800 transition-colors"
+                    title="Regenerate Summary"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingSummary ? 'animate-spin text-purple-600' : ''}`} />
+                  </button>
+                  <button
+                    onClick={handleCopySummary}
+                    disabled={!summaryData}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-purple-700 dark:text-gray-400 hover:bg-white/80 dark:hover:bg-gray-800 transition-colors"
+                    title="Copy Summary"
+                  >
+                    {copiedSummary ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {loadingSummary ? (
+                <div className="text-center py-3 text-xs text-purple-600 flex items-center justify-center gap-1.5 font-medium">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Analyzing chat messages...</span>
+                </div>
+              ) : summaryData ? (
+                <div className="space-y-2.5 text-xs">
+                  <div className="bg-white/90 dark:bg-gray-950/80 p-2.5 rounded-xl border border-purple-100/60 dark:border-purple-900/30">
+                    <p className="text-gray-800 dark:text-gray-200 leading-relaxed font-medium">
+                      {summaryData.overview}
+                    </p>
+                  </div>
+
+                  {summaryData.keyPoints && summaryData.keyPoints.length > 0 && (
+                    <div className="bg-white/70 dark:bg-gray-950/60 p-2.5 rounded-xl border border-purple-100/40 dark:border-purple-900/20">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Target className="w-3 h-3 text-purple-500" /> Key Discussion Points
+                      </p>
+                      <ul className="space-y-1 text-[11px] text-gray-700 dark:text-gray-300">
+                        {summaryData.keyPoints.map((point: string, i: number) => (
+                          <li key={i} className="flex items-start gap-1">
+                            <span className="text-purple-500 font-bold">•</span>
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {summaryData.nextAction && (
+                    <div className="bg-emerald-50/80 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
+                      <p className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                        <ArrowRight className="w-3 h-3 text-emerald-600" /> Recommended Next Action
+                      </p>
+                      <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                        {summaryData.nextAction}
+                      </p>
+                    </div>
+                  )}
+
+                  {summaryData.products && summaryData.products.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {summaryData.products.map((prod: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-semibold"
+                        >
+                          {prod}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-2 text-xs text-gray-400">
+                  Click refresh to generate summary
+                </div>
+              )}
+            </div>
+
             <InfoCard icon={Target} label="Lead Type" value={data.Lead_Type} badge />
             <InfoCard icon={MapPin} label="City" value={data.city} />
             <InfoCard icon={Wrench} label="Machine Interest" value={data.machine_interest} />
             <InfoCard icon={Star} label="Lead Quality" value={data.lead_quality} badge colored />
-            <InfoCard icon={TrendingUp} label="Lead Score" value={data.lead_score} badge colored />
             <InfoCard icon={CheckCircle} label="Callback Ready" value={data.callback_ready} badge />
 
             {/* Dynamically render all other client-specific custom columns */}
@@ -518,20 +775,6 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
                 />
               )
             })}
-
-            {data.conversation_summary && (
-              <div className="mt-5 p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
-                    <MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Conversation Summary</p>
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">
-                  {data.conversation_summary}
-                </p>
-              </div>
-            )}
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 text-center">
