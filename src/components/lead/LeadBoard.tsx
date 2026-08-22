@@ -7,41 +7,66 @@ import LeadCard from './LeadCard'
 import { Plus, Search, Filter, RefreshCw, X, Check, FileText } from 'lucide-react'
 
 const COLUMNS = [
-  { id: 'new', title: 'New', headerBg: 'bg-teal-700', colorClass: 'border-t-teal-700' },
-  { id: 'processing', title: 'Processing', headerBg: 'bg-indigo-900', colorClass: 'border-t-indigo-900' },
-  { id: 'close_by', title: 'Close-by', headerBg: 'bg-lime-600', colorClass: 'border-t-lime-600' },
-  { id: 'confirm', title: 'Confirm', headerBg: 'bg-green-800', colorClass: 'border-t-green-800' },
-  { id: 'cancel', title: 'Cancel', headerBg: 'bg-red-600', colorClass: 'border-t-red-600' },
+  { id: 'new', title: 'New Leads', subtitle: 'Last 24 Hours', headerBg: 'bg-teal-700', colorClass: 'border-t-teal-700' },
+  { id: 'processing', title: 'In Process', subtitle: 'Interested & Review', headerBg: 'bg-indigo-900', colorClass: 'border-t-indigo-900' },
+  { id: 'close_by', title: 'Close-by', subtitle: 'Quotation / Booking', headerBg: 'bg-lime-600', colorClass: 'border-t-lime-600' },
+  { id: 'confirm', title: 'Confirm', subtitle: 'Converted / Closed', headerBg: 'bg-green-800', colorClass: 'border-t-green-800' },
+  { id: 'cancel', title: 'Cancel', subtitle: 'Not Interested', headerBg: 'bg-red-600', colorClass: 'border-t-red-600' },
 ]
 
-export function getLeadColumn(stage: string | undefined | null): string {
-  if (!stage) return 'new'
-  const s = stage.toLowerCase().trim()
+export function getLeadColumn(stage: string | undefined | null, createdAt?: string): string {
+  const s = (stage || 'new').toLowerCase().trim()
 
+  // 1. Explicit Confirm / Deal Closed
   if (['confirm', 'confirmed', 'completed', 'deal_done', 'booked', 'won'].includes(s)) {
     return 'confirm'
   }
+
+  // 2. Explicit Close-by / Pricing / Quotation
   if (['close_by', 'closeby', 'booking', 'proposal_sent', 'quotation', 'pricing'].includes(s)) {
     return 'close_by'
   }
-  if (['cancel', 'cancelled', 'not_interested', 'lost', 'rejected', 'junk'].includes(s)) {
+
+  // 3. Not Interested -> Cancel
+  if (['cancel', 'cancelled', 'not_interested', 'lost', 'rejected', 'junk', 'low_budget'].includes(s)) {
     return 'cancel'
   }
+
+  // 4. Interested / In Process -> In Process column
   if (
     [
       'processing',
+      'in_process',
+      'interested',
       'in_discussion',
       'callback_done_by_ai',
       'call_done',
       'followup',
-      'interested',
       'hot_customer',
-      'low_budget',
       'not_connected',
     ].includes(s)
   ) {
     return 'processing'
   }
+
+  // 5. New leads:
+  // Fresh leads from last 24h go into "New", then after 24h move to "In Process" for review
+  if (s === 'new' || !stage) {
+    if (createdAt) {
+      const createdTime = new Date(createdAt).getTime()
+      if (!isNaN(createdTime)) {
+        const ageHours = (Date.now() - createdTime) / (1000 * 60 * 60)
+        // If created within last 24 hours -> New Leads
+        if (ageHours <= 24) {
+          return 'new'
+        }
+        // If older than 24 hours -> move to In Process for review (next 24 hours)
+        return 'processing'
+      }
+    }
+    return 'new'
+  }
+
   return 'new'
 }
 
@@ -236,15 +261,34 @@ export default function LeadBoard() {
         </div>
       </div>
 
+      {/* Top Filter Chips */}
+      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 text-xs">
+        {COLUMNS.map((col) => {
+          const count = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id).length
+          return (
+            <div
+              key={col.id}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 whitespace-nowrap shadow-2xs"
+            >
+              <span className="font-semibold">{col.title}</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                {count}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
       {/* 5-Column Kanban Board */}
       <div className="flex-1 flex overflow-x-auto gap-4 pb-4 min-h-[500px]">
         {COLUMNS.map((col) => {
-          const columnLeads = filteredLeads.filter((l) => getLeadColumn(l.stage) === col.id)
+          const columnLeads = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id)
 
           return (
             <LeadColumn
               key={col.id}
               title={col.title}
+              subtitle={col.subtitle}
               count={columnLeads.length}
               headerBg={col.headerBg}
               colorClass={col.colorClass}

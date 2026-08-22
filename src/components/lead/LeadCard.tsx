@@ -11,11 +11,11 @@ interface LeadCardProps {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  new: 'New',
-  processing: 'Processing',
+  new: 'New Leads (Last 24h)',
+  processing: 'In Process (Interested)',
   close_by: 'Close-by',
   confirm: 'Confirm',
-  cancel: 'Cancel',
+  cancel: 'Cancel (Not Interested)',
 }
 
 export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProps) {
@@ -33,7 +33,11 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
         .replace(',', '')
     : ''
 
-  const currentColumn = getLeadColumn(lead.stage)
+  const currentColumn = getLeadColumn(lead.stage, lead.created_at)
+
+  const createdTime = lead.created_at ? new Date(lead.created_at).getTime() : 0
+  const ageHours = createdTime ? (Date.now() - createdTime) / (1000 * 60 * 60) : 999
+  const isLast24h = ageHours <= 24
 
   return (
     <div
@@ -57,12 +61,12 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
               className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 transition-colors"
               title="Change Stage"
             >
-              <span>{STAGE_LABELS[currentColumn] || 'Stage'}</span>
+              <span>{STAGE_LABELS[currentColumn]?.split(' ')[0] || 'Stage'}</span>
               <ChevronDown className="w-2.5 h-2.5" />
             </button>
 
             {showStageMenu && (
-              <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-30 text-xs">
+              <div className="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-30 text-xs">
                 {Object.entries(STAGE_LABELS).map(([stageKey, label]) => (
                   <button
                     key={stageKey}
@@ -95,9 +99,21 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
             {lead.source || 'Face Book'}
           </span>
 
-          {lead.stage && lead.stage !== currentColumn && (
-            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500">
-              {lead.stage.replace(/_/g, ' ')}
+          {currentColumn === 'new' && isLast24h && (
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+              ⚡ &lt;24h New
+            </span>
+          )}
+
+          {currentColumn === 'processing' && (
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              {lead.stage === 'interested' ? '🎯 Interested' : '🔄 In Process'}
+            </span>
+          )}
+
+          {currentColumn === 'cancel' && (
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+              ❌ Cancelled
             </span>
           )}
         </div>

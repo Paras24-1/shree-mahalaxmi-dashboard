@@ -4,6 +4,7 @@ import { ReactNode } from 'react'
 
 interface LeadColumnProps {
   title: string
+  subtitle?: string
   count: number
   colorClass: string
   headerBg: string
@@ -11,7 +12,7 @@ interface LeadColumnProps {
   onDrop: (leadId: string) => void
 }
 
-export default function LeadColumn({ title, count, colorClass, headerBg, children, onDrop }: LeadColumnProps) {
+export default function LeadColumn({ title, subtitle, count, colorClass, headerBg, children, onDrop }: LeadColumnProps) {
   return (
     <div
       className="flex-1 min-w-[300px] max-w-[350px] flex flex-col h-full"
@@ -25,7 +26,10 @@ export default function LeadColumn({ title, count, colorClass, headerBg, childre
       }}
     >
       <div className={`flex items-center justify-between px-4 py-3 rounded-t-lg ${headerBg} text-white`}>
-        <h3 className="font-bold text-sm">{title}</h3>
+        <div>
+          <h3 className="font-bold text-sm">{title}</h3>
+          {subtitle && <p className="text-[10px] text-white/80 font-normal">{subtitle}</p>}
+        </div>
         <span className="bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
           {count}
         </span>
