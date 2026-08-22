@@ -17,9 +17,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <ProtectedRoute>
-      <div className="flex h-screen w-full overflow-hidden bg-gray-50 dark:bg-gray-900">
+      <div className="fixed inset-0 flex w-full h-full overflow-hidden bg-gray-50 dark:bg-gray-900">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="flex flex-col flex-1 overflow-hidden min-w-0 w-full">
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0 w-full h-full">
           <Topbar onOpenSidebar={() => setSidebarOpen(true)} />
           <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 min-h-0 relative w-full">
             {children}
