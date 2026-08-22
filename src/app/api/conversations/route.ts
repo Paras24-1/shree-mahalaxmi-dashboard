@@ -12,41 +12,67 @@ export async function GET(req: NextRequest) {
     const stage = searchParams.get('stage') || ''
     const unread = searchParams.get('unread') === 'true'
     const assignFilter = searchParams.get('assign_filter') || ''
+    const limitParam = searchParams.get('limit')
 
-    let pageQuery = supabaseAdmin
-      .from('conversations')
-      .select('*')
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .limit(500)
+    const hasSpecificLimit = limitParam && !isNaN(Number(limitParam))
+    const maxLimit = hasSpecificLimit ? Number(limitParam) : Infinity
 
-    // Admin / user explicit assignment filter tabs
-    if (assignFilter === 'unassigned') {
-      pageQuery = pageQuery.is('assigned_to', null)
-    } else if (assignFilter === 'assigned') {
-      pageQuery = pageQuery.not('assigned_to', 'is', null)
-    } else if (assignFilter && assignFilter !== 'all') {
-      pageQuery = pageQuery.eq('assigned_to', assignFilter)
-    }
+    let allConversations: any[] = []
+    let page = 0
+    const pageSize = 1000
+    let hasMore = true
 
-    if (search) {
-      const cleanSearch = search.replace(/[,()"]/g, '').trim()
-      if (cleanSearch) {
-        pageQuery = pageQuery.or(`name.ilike.%${cleanSearch}%,phone_number.ilike.%${cleanSearch}%`)
+    while (hasMore) {
+      const from = page * pageSize
+      const to = hasSpecificLimit
+        ? Math.min((page + 1) * pageSize - 1, maxLimit - 1)
+        : (page + 1) * pageSize - 1
+
+      let pageQuery = supabaseAdmin
+        .from('conversations')
+        .select('*')
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .range(from, to)
+
+      // Admin / user explicit assignment filter tabs
+      if (assignFilter === 'unassigned') {
+        pageQuery = pageQuery.is('assigned_to', null)
+      } else if (assignFilter === 'assigned') {
+        pageQuery = pageQuery.not('assigned_to', 'is', null)
+      } else if (assignFilter && assignFilter !== 'all') {
+        pageQuery = pageQuery.eq('assigned_to', assignFilter)
       }
-    }
-    if (stage) {
-      if (stage === 'interested') {
-        pageQuery = pageQuery.in('stage', ['interested', 'callback_done_by_ai'])
+
+      if (search) {
+        const cleanSearch = search.replace(/[,()"]/g, '').trim()
+        if (cleanSearch) {
+          pageQuery = pageQuery.or(`name.ilike.%${cleanSearch}%,phone_number.ilike.%${cleanSearch}%`)
+        }
+      }
+      if (stage) {
+        if (stage === 'interested') {
+          pageQuery = pageQuery.in('stage', ['interested', 'callback_done_by_ai'])
+        } else {
+          pageQuery = pageQuery.eq('stage', stage)
+        }
+      }
+      if (unread) pageQuery = pageQuery.gt('unread_count', 0)
+
+      const { data, error } = await pageQuery
+      if (error) throw error
+
+      if (data && data.length > 0) {
+        allConversations = [...allConversations, ...data]
+        page++
+        if (data.length < pageSize || allConversations.length >= maxLimit) {
+          hasMore = false
+        }
       } else {
-        pageQuery = pageQuery.eq('stage', stage)
+        hasMore = false
       }
     }
-    if (unread) pageQuery = pageQuery.gt('unread_count', 0)
 
-    const { data, error } = await pageQuery
-    if (error) throw error
-
-    return NextResponse.json(data || [], {
+    return NextResponse.json(allConversations, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         Pragma: 'no-cache',

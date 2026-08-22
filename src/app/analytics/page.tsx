@@ -185,11 +185,16 @@ function AnalyticsContent() {
   }
 
   const getFilteredConversations = (convs: any[], range: string) => {
+    if (range === 'all') return convs
     const now = new Date()
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     
     return convs.filter(c => {
-      const createdDate = new Date(c.created_at)
+      const rawDate = c.created_at || c.updated_at
+      if (!rawDate) return false
+      const createdDate = new Date(rawDate)
+      if (isNaN(createdDate.getTime())) return false
+
       if (range === 'today') {
         return createdDate >= startOfToday
       }
