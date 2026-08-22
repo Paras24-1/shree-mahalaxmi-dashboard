@@ -29,6 +29,7 @@ export function useConversations(
     async (silent = false) => {
       try {
         const params = new URLSearchParams()
+        params.set('limit', '300')
         if (filters.assignFilter && filters.assignFilter !== 'all') {
           params.set('assign_filter', filters.assignFilter)
         }
@@ -55,12 +56,19 @@ export function useConversations(
     fetchConversations()
   }, [fetchConversations])
 
-  // Periodic polling fallback (every 3.5s) to guarantee real-time updates even if WebSockets are blocked or dropped
+  // Periodic polling fallback (every 20s) and on window focus
   useEffect(() => {
+    const handleFocus = () => fetchConversations(true)
+    window.addEventListener('focus', handleFocus)
+
     const interval = setInterval(() => {
       fetchConversations(true)
-    }, 3500)
-    return () => clearInterval(interval)
+    }, 20000)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      clearInterval(interval)
+    }
   }, [fetchConversations])
 
   // 2. Persistent Single Realtime Subscription
@@ -235,12 +243,12 @@ export function useMessages(conversationId: string | null) {
     fetchMessages()
   }, [conversationId, fetchMessages])
 
-  // Polling fallback every 3.5s for the active chat
+  // Polling fallback every 15s for the active chat
   useEffect(() => {
     if (!conversationId) return
     const interval = setInterval(() => {
       fetchMessages(true)
-    }, 3500)
+    }, 15000)
     return () => clearInterval(interval)
   }, [conversationId, fetchMessages])
 

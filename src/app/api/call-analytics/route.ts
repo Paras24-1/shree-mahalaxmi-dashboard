@@ -10,6 +10,54 @@ const queryClient = (voiceSaasSupabaseUrl && voiceSaasSupabaseServiceKey)
   ? createClient(voiceSaasSupabaseUrl, voiceSaasSupabaseServiceKey)
   : defaultSupabaseAdmin
 
+let cachedPhoneMap: Map<string, string> | null = null
+let cachedPhoneMapExpiry = 0
+
+async function getPhoneToEmployeeMap(): Promise<Map<string, string>> {
+  const now = Date.now()
+  if (cachedPhoneMap && now < cachedPhoneMapExpiry) {
+    return cachedPhoneMap
+  }
+
+  let conversations: any[] = []
+  let pageConv = 0
+  const pageSize = 1000
+  let hasMoreConv = true
+
+  while (hasMoreConv) {
+    const { data, error } = await defaultSupabaseAdmin
+      .from('conversations')
+      .select('phone_number, assigned_to')
+      .not('assigned_to', 'is', null)
+      .range(pageConv * pageSize, (pageConv + 1) * pageSize - 1)
+
+    if (error) break
+    if (data && data.length > 0) {
+      conversations = [...conversations, ...data]
+      pageConv++
+      if (data.length < pageSize) {
+        hasMoreConv = false
+      }
+    } else {
+      hasMoreConv = false
+    }
+  }
+
+  const phoneMap = new Map<string, string>()
+  for (const c of conversations) {
+    if (c.phone_number && c.assigned_to) {
+      const clean = c.phone_number.replace(/\D/g, '')
+      if (clean) {
+        phoneMap.set(clean.slice(-10), c.assigned_to)
+      }
+    }
+  }
+
+  cachedPhoneMap = phoneMap
+  cachedPhoneMapExpiry = now + 60_000 // 60s cache
+  return phoneMap
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const timeRange = searchParams.get('timeRange') || 'all'
@@ -30,66 +78,29 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 1. Get all CRM conversations paginated to get assigned_to mappings
-    let conversations: any[] = []
-    let pageConv = 0
-    const pageSize = 1000
-    let hasMoreConv = true
-
-    while (hasMoreConv) {
-      const { data, error } = await defaultSupabaseAdmin
-        .from('conversations')
-        .select('phone_number, assigned_to')
-        .range(pageConv * pageSize, (pageConv + 1) * pageSize - 1)
-
-      if (error) throw error
-      if (data && data.length > 0) {
-        conversations = [...conversations, ...data]
-        pageConv++
-        if (data.length < pageSize) {
-          hasMoreConv = false
-        }
-      } else {
-        hasMoreConv = false
-      }
-    }
-
     const voiceOrgId = process.env.VOICE_SAAS_ORGANIZATION_ID || '9bc1c153-e617-444a-81e1-f3951d4b386b'
 
-    // 2. Fetch call logs from Voice SaaS database
+    // Build call logs query
     let logsQuery = queryClient
       .from('call_logs')
       .select('id, from_phone_number, to_phone_number, duration_seconds, status, created_at, recording_url')
       .eq('organization_id', voiceOrgId)
+      .order('created_at', { ascending: false })
+      .limit(5000)
 
     if (hasFilter) {
       logsQuery = logsQuery.gte('created_at', dateFilter.toISOString())
     }
 
-    const { data: callLogs, error: logsError } = await logsQuery
+    // Run queries in parallel
+    const [phoneToEmployeeMap, { data: callLogs, error: logsError }, { data: employees, error: empError }] = await Promise.all([
+      getPhoneToEmployeeMap(),
+      logsQuery,
+      defaultSupabaseAdmin.from('users').select('id, name, email').eq('role', 'employee'),
+    ])
+
     if (logsError) throw logsError
-
-    // 3. Fetch CRM users (employees)
-    const { data: employees, error: empError } = await defaultSupabaseAdmin
-      .from('users')
-      .select('id, name, email')
-      .eq('role', 'employee')
-
     if (empError) throw empError
-
-    // Map customer phone numbers (last 10 digits) to assigned employee ID
-    const phoneToEmployeeMap = new Map<string, string>()
-    if (conversations) {
-      for (const c of conversations) {
-        if (c.phone_number) {
-          const clean = c.phone_number.replace(/\D/g, '')
-          if (clean) {
-            const last10 = clean.slice(-10)
-            phoneToEmployeeMap.set(last10, c.assigned_to)
-          }
-        }
-      }
-    }
 
     // Initialize stats map for employees
     const employeeStatsMap = new Map<string, {

@@ -72,21 +72,28 @@ function AnalyticsContent() {
   const [loading, setLoading] = useState(true)
 
   // Call Analytics states
+  const [callAnalyticsCache, setCallAnalyticsCache] = useState<Record<string, any>>({})
   const [callAnalytics, setCallAnalytics] = useState<any>(null)
   const [loadingCalls, setLoadingCalls] = useState(false)
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all')
 
   useEffect(() => {
-    fetchCallAnalytics()
+    fetchCallAnalytics(timeRange)
   }, [timeRange])
 
-  const fetchCallAnalytics = async () => {
+  const fetchCallAnalytics = async (range: string) => {
+    if (callAnalyticsCache[range]) {
+      setCallAnalytics(callAnalyticsCache[range])
+      return
+    }
+
     setLoadingCalls(true)
     try {
-      const res = await fetch(`/api/call-analytics?timeRange=${timeRange}&t=${Date.now()}`)
+      const res = await fetch(`/api/call-analytics?timeRange=${range}&t=${Date.now()}`)
       if (res.ok) {
         const data = await res.json()
         setCallAnalytics(data)
+        setCallAnalyticsCache((prev) => ({ ...prev, [range]: data }))
       }
     } catch (err) {
       console.error('Failed to fetch call analytics:', err)
@@ -154,23 +161,25 @@ function AnalyticsContent() {
   const fetchStats = async () => {
     setLoading(true)
     try {
-      // 1. Fetch conversations from the service role API route with cache buster
-      const convsRes = await fetch(`/api/conversations?t=${Date.now()}`)
+      const [convsRes, usersRes, assignRes] = await Promise.all([
+        fetch(`/api/conversations?all=true&t=${Date.now()}`),
+        fetch(`/api/users?t=${Date.now()}`),
+        fetch(`/api/assignments?t=${Date.now()}`),
+      ])
+
       if (!convsRes.ok) throw new Error('Failed to fetch conversations')
-      const conversations = await convsRes.json()
-
-      // 2. Fetch users from the service role API route and filter to get employees with cache buster
-      const usersRes = await fetch(`/api/users?t=${Date.now()}`)
       if (!usersRes.ok) throw new Error('Failed to fetch users')
-      const allUsers = await usersRes.json()
-      const employees = Array.isArray(allUsers) 
-        ? allUsers.filter((u: any) => u.role === 'employee') 
-        : []
-
-      // 3. Fetch assignments from the service role API route with cache buster
-      const assignRes = await fetch(`/api/assignments?t=${Date.now()}`)
       if (!assignRes.ok) throw new Error('Failed to fetch assignments')
-      const assignments = await assignRes.json()
+
+      const [conversations, allUsers, assignments] = await Promise.all([
+        convsRes.json(),
+        usersRes.json(),
+        assignRes.json(),
+      ])
+
+      const employees = Array.isArray(allUsers)
+        ? allUsers.filter((u: any) => u.role === 'employee')
+        : []
 
       if (conversations && employees) {
         setAllConversations(conversations)

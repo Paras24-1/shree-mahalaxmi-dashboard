@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
     const assignFilter = searchParams.get('assign_filter') || ''
     const limitParam = searchParams.get('limit')
 
+    const isAll = searchParams.get('all') === 'true' || limitParam === 'all'
     const hasSpecificLimit = limitParam && !isNaN(Number(limitParam))
-    const maxLimit = hasSpecificLimit ? Number(limitParam) : Infinity
+    const maxLimit = isAll ? Infinity : (hasSpecificLimit ? Number(limitParam) : 300)
 
     let allConversations: any[] = []
     let page = 0
@@ -24,13 +25,13 @@ export async function GET(req: NextRequest) {
 
     while (hasMore) {
       const from = page * pageSize
-      const to = hasSpecificLimit
-        ? Math.min((page + 1) * pageSize - 1, maxLimit - 1)
-        : (page + 1) * pageSize - 1
+      const to = isAll
+        ? (page + 1) * pageSize - 1
+        : Math.min((page + 1) * pageSize - 1, maxLimit - 1)
 
       let pageQuery = supabaseAdmin
         .from('conversations')
-        .select('*')
+        .select('id, name, phone_number, last_message, unread_count, stage, assigned_to, updated_at, created_at, ai_mode')
         .order('updated_at', { ascending: false, nullsFirst: false })
         .range(from, to)
 
