@@ -1,10 +1,27 @@
-'use client'
-
 import { useState, useRef, useEffect } from 'react'
 import { Conversation } from '@/types'
 import { useMessages, useSendMessage } from '@/hooks'
 import { formatDistanceToNow } from 'date-fns'
-import { Send, Bot, User, Loader2, Paperclip, X, Tag } from 'lucide-react'
+import {
+  Send,
+  Bot,
+  User,
+  Loader2,
+  Paperclip,
+  X,
+  Tag,
+  Sparkles,
+  Copy,
+  Check,
+  RefreshCw,
+  Edit3,
+  Save,
+  ChevronDown,
+  ChevronUp,
+  Target,
+  Wrench,
+  ArrowRight,
+} from 'lucide-react'
 
 interface Props {
   conversation: Conversation | null
@@ -12,11 +29,29 @@ interface Props {
   onStageChange?: (id: string, stage: string) => void
 }
 
+interface SummaryData {
+  overview: string
+  intent: string
+  products: string[]
+  keyPoints: string[]
+  nextAction: string
+  sentiment: 'positive' | 'neutral' | 'inquiry' | 'urgent'
+}
+
 export default function ChatWindow({ conversation, onAIToggle, onStageChange }: Props) {
   const [input, setInput] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+
+  // AI Summary State
+  const [showSummary, setShowSummary] = useState(false)
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null)
+  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [copiedSummary, setCopiedSummary] = useState(false)
+  const [isEditingSummary, setIsEditingSummary] = useState(false)
+  const [customSummaryText, setCustomSummaryText] = useState('')
+  const [savingSummary, setSavingSummary] = useState(false)
 
   const STAGES = ['new', 'callback_done_by_ai', 'interested', 'booking', 'confirmed', 'cancelled', 'completed', 'followup', 'not_interested', 'call_done', 'low_budget', 'hot_customer', 'not_connected'] as const
   const STAGE_COLORS: Record<string, string> = {
@@ -182,6 +217,48 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
     setSavingStage(false)
   }
 
+  const fetchSummary = async (force = false) => {
+    if (!conversation?.id) return
+    setLoadingSummary(true)
+    try {
+      const res = await fetch(`/api/summary?conversation_id=${conversation.id}&t=${Date.now()}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.summary) {
+          setSummaryData(data.summary)
+          setCustomSummaryText(data.savedSummary || data.summary.overview)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load summary:', err)
+    } finally {
+      setLoadingSummary(false)
+    }
+  }
+
+  useEffect(() => {
+    if (conversation?.id) {
+      fetchSummary()
+    } else {
+      setSummaryData(null)
+      setShowSummary(false)
+    }
+  }, [conversation?.id])
+
+  const handleCopySummary = () => {
+    if (!summaryData) return
+    const text = `📋 Chat Summary for ${conversation?.name || conversation?.phone_number}:
+• Intent: ${summaryData.intent}
+• Overview: ${summaryData.overview}
+• Key Points:
+${summaryData.keyPoints.map((p) => `  - ${p}`).join('\n')}
+• Next Action: ${summaryData.nextAction}`
+
+    navigator.clipboard.writeText(text)
+    setCopiedSummary(true)
+    setTimeout(() => setCopiedSummary(false), 2000)
+  }
+
   const formatMessageTime = (dateStr?: string) => {
     if (!dateStr) return ''
     const d = new Date(dateStr)
@@ -202,13 +279,33 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
   return (
     <div className="flex-1 flex flex-col bg-white dark:bg-gray-950 min-h-0">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center justify-between shrink-0">
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center justify-between shrink-0 flex-wrap gap-2">
         <div>
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{conversation.name || conversation.phone_number}</h2>
           <p className="text-xs text-gray-500">{conversation.phone_number}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* AI Summary Toggle Button */}
+          <button
+            onClick={() => {
+              if (!showSummary && !summaryData) {
+                fetchSummary()
+              }
+              setShowSummary((v) => !v)
+            }}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              showSummary
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
+            }`}
+            title="Toggle AI Chat Summary"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-500 fill-current" />
+            <span className="hidden sm:inline">AI Summary</span>
+            <span className="sm:hidden">Summary</span>
+          </button>
+
           {/* Stage Selector */}
           <div className="flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5 text-gray-400" />
@@ -250,6 +347,119 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
           </button>
         </div>
       </div>
+
+      {/* Expandable AI Chat Summary Drawer / Banner */}
+      {showSummary && (
+        <div className="bg-gradient-to-r from-purple-50/90 via-indigo-50/70 to-blue-50/90 dark:from-gray-900 dark:via-purple-950/20 dark:to-gray-900 border-b border-purple-100 dark:border-purple-900/40 p-3.5 transition-all">
+          <div className="max-w-4xl mx-auto space-y-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-900 dark:text-white">Chat Summary & Intelligence</span>
+                  {summaryData?.intent && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+                      {summaryData.intent}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => fetchSummary(true)}
+                  disabled={loadingSummary}
+                  className="px-2 py-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-white/80 dark:hover:bg-gray-800 transition-colors text-[11px] font-medium flex items-center gap-1"
+                  title="Regenerate Summary"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingSummary ? 'animate-spin text-purple-600' : ''}`} />
+                  <span>Regenerate</span>
+                </button>
+
+                <button
+                  onClick={handleCopySummary}
+                  disabled={!summaryData}
+                  className="px-2 py-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-white/80 dark:hover:bg-gray-800 transition-colors text-[11px] font-medium flex items-center gap-1"
+                  title="Copy Summary"
+                >
+                  {copiedSummary ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedSummary ? 'Copied' : 'Copy'}</span>
+                </button>
+
+                <button
+                  onClick={() => setShowSummary(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  title="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {loadingSummary ? (
+              <div className="py-3 flex items-center justify-center gap-2 text-xs text-purple-600 font-medium">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Analyzing conversation history...</span>
+              </div>
+            ) : summaryData ? (
+              <div className="space-y-2 text-xs">
+                <div className="bg-white/90 dark:bg-gray-950/90 rounded-xl p-2.5 border border-purple-100/60 dark:border-purple-900/30 shadow-2xs">
+                  <p className="text-gray-800 dark:text-gray-200 leading-relaxed font-medium">
+                    {summaryData.overview}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div className="bg-white/70 dark:bg-gray-950/70 rounded-xl p-2.5 border border-purple-100/40 dark:border-purple-900/20">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Target className="w-3 h-3 text-purple-500" /> Key Discussion Points
+                    </p>
+                    <ul className="space-y-0.5 text-gray-700 dark:text-gray-300">
+                      {summaryData.keyPoints.map((point, i) => (
+                        <li key={i} className="flex items-start gap-1 text-[11px]">
+                          <span className="text-purple-500 font-bold">•</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="bg-white/70 dark:bg-gray-950/70 rounded-xl p-2.5 border border-purple-100/40 dark:border-purple-900/20 flex flex-col justify-between space-y-1.5">
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                        <ArrowRight className="w-3 h-3 text-emerald-500" /> Recommended Next Action
+                      </p>
+                      <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                        {summaryData.nextAction}
+                      </p>
+                    </div>
+
+                    {summaryData.products.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <Wrench className="w-3 h-3 text-blue-500" /> Products Mentioned
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {summaryData.products.map((p, i) => (
+                            <span
+                              key={i}
+                              className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-semibold"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
