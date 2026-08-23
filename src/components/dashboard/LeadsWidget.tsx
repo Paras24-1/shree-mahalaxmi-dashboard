@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Filter, Phone } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Filter, Phone, MessageSquare, ArrowRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export default function LeadsWidget() {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState('New')
   const [leads, setLeads] = useState<any[]>([])
 
@@ -30,6 +32,12 @@ export default function LeadsWidget() {
       return leads.filter(l => ['completed', 'booked', 'deal_done', 'won', 'closed'].includes(l.stage))
     }
     return leads
+  }
+
+  const handleOpenChat = (lead: any) => {
+    const targetId = lead.conversation_id || lead.id || ''
+    const phone = lead.phone_number ? encodeURIComponent(lead.phone_number) : ''
+    router.push(`/chat?conversation_id=${targetId}&phone=${phone}`)
   }
 
   const activeLeads = getFilteredLeads(activeTab)
@@ -68,9 +76,13 @@ export default function LeadsWidget() {
           </div>
         ) : (
           activeLeads.map(lead => (
-            <div key={lead.id} className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+            <div
+              key={lead.id}
+              onClick={() => handleOpenChat(lead)}
+              className="border border-gray-100 dark:border-gray-800 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-lg p-4 cursor-pointer hover:shadow-md transition-all group bg-white dark:bg-gray-900"
+            >
               <div className="flex justify-between items-start mb-2">
-                <h4 className="text-sm font-bold text-green-700 flex items-center gap-2">
+                <h4 className="text-sm font-bold text-green-700 group-hover:text-indigo-600 transition-colors flex items-center gap-2">
                   <UsersIcon /> {lead.name || `Lead #${lead.phone_number?.slice(-4) || 'Contact'}`}
                 </h4>
                 {lead.phone_number && (
@@ -84,13 +96,20 @@ export default function LeadsWidget() {
                 <CalendarIcon /> {new Date(lead.created_at).toLocaleString()}
               </div>
 
-              <div className="flex justify-between items-center mt-3 text-xs font-semibold text-gray-600">
+              <div className="flex justify-between items-center mt-3 text-xs font-semibold text-gray-600 dark:text-gray-400">
                 <div>Created By: Admin</div>
                 <div>Stage: <span className="capitalize font-bold text-indigo-600">{lead.stage || 'new'}</span></div>
               </div>
-              <div className="flex gap-2 mt-2">
-                <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-[10px] font-bold border border-indigo-100">
-                  WhatsApp CRM
+              <div className="flex justify-between items-center mt-2">
+                <div className="flex gap-2">
+                  <span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-bold border border-indigo-100 dark:border-indigo-900/40">
+                    WhatsApp CRM
+                  </span>
+                </div>
+                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Open Chat</span>
+                  <ArrowRight className="w-3 h-3" />
                 </span>
               </div>
             </div>

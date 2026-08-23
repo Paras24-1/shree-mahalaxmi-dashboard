@@ -93,6 +93,37 @@ function ChatContent() {
           }
         }
 
+        // 3. Fallback: If targetId is a lead ID in 'leads' table, check lead's conversation_id or phone
+        if (!conv && targetId) {
+          const { data: leadData } = await supabase
+            .from('leads')
+            .select('*')
+            .eq('id', targetId)
+            .maybeSingle()
+
+          if (leadData?.conversation_id) {
+            const { data } = await supabase
+              .from('conversations')
+              .select('*')
+              .eq('id', leadData.conversation_id)
+              .maybeSingle()
+            if (data) conv = data
+          }
+
+          if (!conv && leadData?.phone_number) {
+            const cleanPhone = leadData.phone_number.replace(/\D/g, '').slice(-10)
+            if (cleanPhone) {
+              const { data } = await supabase
+                .from('conversations')
+                .select('*')
+                .ilike('phone_number', `%${cleanPhone}`)
+                .limit(1)
+                .maybeSingle()
+              if (data) conv = data
+            }
+          }
+        }
+
         if (conv) {
           handleSelect(conv)
         }
