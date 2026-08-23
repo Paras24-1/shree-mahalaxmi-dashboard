@@ -8,8 +8,8 @@ import { Plus, Search, Filter, RefreshCw, X, Check, FileText } from 'lucide-reac
 
 const COLUMNS = [
   { id: 'new', title: 'New Leads', subtitle: 'Last 24 Hours', headerBg: 'bg-teal-700', colorClass: 'border-t-teal-700' },
-  { id: 'processing', title: 'In Process', subtitle: 'Interested & Review', headerBg: 'bg-indigo-900', colorClass: 'border-t-indigo-900' },
-  { id: 'close_by', title: 'Close-by', subtitle: 'Quotation / Booking', headerBg: 'bg-lime-600', colorClass: 'border-t-lime-600' },
+  { id: 'interested', title: 'Interested', subtitle: 'Hot & Interested Leads', headerBg: 'bg-lime-600', colorClass: 'border-t-lime-600' },
+  { id: 'processing', title: 'In Process', subtitle: 'Follow-up & Review', headerBg: 'bg-indigo-900', colorClass: 'border-t-indigo-900' },
   { id: 'confirm', title: 'Confirm', subtitle: 'Converted / Closed', headerBg: 'bg-green-800', colorClass: 'border-t-green-800' },
   { id: 'cancel', title: 'Cancel', subtitle: 'Not Interested', headerBg: 'bg-red-600', colorClass: 'border-t-red-600' },
 ]
@@ -18,31 +18,29 @@ export function getLeadColumn(stage: string | undefined | null, createdAt?: stri
   const s = (stage || 'new').toLowerCase().trim()
 
   // 1. Explicit Confirm / Deal Closed
-  if (['confirm', 'confirmed', 'completed', 'deal_done', 'booked', 'won'].includes(s)) {
+  if (['confirm', 'confirmed', 'completed', 'deal_done', 'booked', 'won', 'closed'].includes(s)) {
     return 'confirm'
   }
 
-  // 2. Explicit Close-by / Pricing / Quotation
-  if (['close_by', 'closeby', 'booking', 'proposal_sent', 'quotation', 'pricing'].includes(s)) {
-    return 'close_by'
-  }
-
-  // 3. Not Interested -> Cancel
+  // 2. Not Interested -> Cancel
   if (['cancel', 'cancelled', 'not_interested', 'lost', 'rejected', 'junk', 'low_budget'].includes(s)) {
     return 'cancel'
   }
 
-  // 4. Interested / In Process -> In Process column
+  // 3. Interested leads
+  if (['interested', 'hot_customer', 'hot_lead', 'booking', 'proposal_sent', 'quotation', 'pricing', 'close_by', 'closeby'].includes(s)) {
+    return 'interested'
+  }
+
+  // 4. In Process / Follow-up
   if (
     [
       'processing',
       'in_process',
-      'interested',
       'in_discussion',
       'callback_done_by_ai',
       'call_done',
       'followup',
-      'hot_customer',
       'not_connected',
     ].includes(s)
   ) {
@@ -384,8 +382,8 @@ export default function LeadBoard() {
                     className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 outline-none font-semibold"
                   >
                     <option value="new">New</option>
+                    <option value="interested">Interested</option>
                     <option value="processing">Processing</option>
-                    <option value="close_by">Close-by</option>
                     <option value="confirm">Confirm</option>
                     <option value="cancel">Cancel</option>
                   </select>

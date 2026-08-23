@@ -19,17 +19,17 @@ export default function LeadsWidget() {
     loadLeads()
   }, [])
 
-  const tabs = ['New', 'Processing', 'Close-by']
+  const tabs = ['New', 'Interested', 'Processing']
 
   const getFilteredLeads = (tab: string) => {
     if (tab === 'New') {
       return leads.filter(l => l.stage === 'new' || !l.stage)
     }
-    if (tab === 'Processing') {
-      return leads.filter(l => ['processing', 'interested', 'hot_lead', 'callback_done_by_ai', 'in_discussion'].includes(l.stage))
+    if (tab === 'Interested') {
+      return leads.filter(l => ['interested', 'hot_customer', 'hot_lead', 'booking', 'proposal_sent', 'booked', 'deal_done'].includes(l.stage?.toLowerCase()))
     }
-    if (tab === 'Close-by') {
-      return leads.filter(l => ['completed', 'booked', 'deal_done', 'won', 'closed'].includes(l.stage))
+    if (tab === 'Processing') {
+      return leads.filter(l => ['processing', 'in_process', 'in_discussion', 'callback_done_by_ai', 'call_done', 'followup', 'not_connected'].includes(l.stage?.toLowerCase()))
     }
     return leads
   }

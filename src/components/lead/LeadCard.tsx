@@ -13,8 +13,8 @@ interface LeadCardProps {
 
 const STAGE_LABELS: Record<string, string> = {
   new: 'New Leads (Last 24h)',
-  processing: 'In Process (Interested)',
-  close_by: 'Close-by',
+  interested: 'Interested',
+  processing: 'In Process (Follow-up)',
   confirm: 'Confirm',
   cancel: 'Cancel (Not Interested)',
 }
@@ -122,9 +122,15 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
             </span>
           )}
 
+          {currentColumn === 'interested' && (
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-lime-50 dark:bg-lime-950 text-lime-700 dark:text-lime-300 border border-lime-200 dark:border-lime-800">
+              🎯 Interested
+            </span>
+          )}
+
           {currentColumn === 'processing' && (
             <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-              {lead.stage === 'interested' ? '🎯 Interested' : '🔄 In Process'}
+              🔄 In Process
             </span>
           )}
 
