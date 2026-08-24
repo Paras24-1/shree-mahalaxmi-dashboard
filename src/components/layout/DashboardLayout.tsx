@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import FollowupRunner from '@/components/common/FollowupRunner'
 import {
   LayoutDashboard,
   Filter,
@@ -36,6 +37,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <ProtectedRoute>
+      <FollowupRunner />
       <div className="fixed inset-0 flex w-full h-full overflow-hidden bg-gray-50 dark:bg-gray-900">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex flex-col flex-1 overflow-hidden min-w-0 w-full h-full">

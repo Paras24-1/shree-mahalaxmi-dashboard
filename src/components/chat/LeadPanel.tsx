@@ -25,6 +25,9 @@ import {
   Sparkles,
   ArrowRight,
   Copy,
+  PhoneCall,
+  Bot,
+  Zap,
 } from 'lucide-react'
 
 // Helper to clean, parse, and split call transcripts into structured speech bubbles, skipping debug logs
@@ -157,6 +160,54 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   const [activityNotes, setActivityNotes] = useState('')
   const [savingActivity, setSavingActivity] = useState(false)
   const [editingActivity, setEditingActivity] = useState<LeadActivity | null>(null)
+
+  // Voice AI Manual Trigger state
+  const [triggeringAICall, setTriggeringAICall] = useState(false)
+  const [aiCallFeedback, setAiCallFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  const handleTriggerAICallNow = async () => {
+    const phone = conversation?.phone_number || lead?.phone_number || sheetData?.Phone
+    const name = lead?.name || conversation?.name || sheetData?.Name || 'Lead'
+    
+    if (!phone) {
+      setAiCallFeedback({ type: 'error', message: 'No phone number available for this lead' })
+      setTimeout(() => setAiCallFeedback(null), 4000)
+      return
+    }
+
+    setTriggeringAICall(true)
+    setAiCallFeedback(null)
+
+    try {
+      const res = await fetch('/api/calls/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone_number: phone,
+          name,
+          lead_id: lead?.id,
+          conversation_id: conversation?.id,
+          notes: lead?.followup_notes || modalNotes || 'Manual CRM Voice AI trigger',
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to trigger Voice AI call')
+      }
+
+      setAiCallFeedback({ type: 'success', message: '📞 Voice AI Call Initiated Successfully!' })
+      if (lead?.id) {
+        fetchActivities(lead.id)
+      }
+      setTimeout(() => setAiCallFeedback(null), 5000)
+    } catch (err: any) {
+      setAiCallFeedback({ type: 'error', message: err.message || 'Error triggering call' })
+      setTimeout(() => setAiCallFeedback(null), 5000)
+    } finally {
+      setTriggeringAICall(false)
+    }
+  }
 
   // AI Chat Summary state
   const [summaryData, setSummaryData] = useState<any | null>(null)
@@ -787,8 +838,8 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
         )}
 
         {/* Follow-up Reminder Section */}
-        <div className="p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
+        <div className="p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center">
                 <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -802,53 +853,111 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
               {hasFollowup ? 'Edit' : 'Set Followup'}
             </button>
           </div>
-          
+
+          {/* AI Call Feedback Alert */}
+          {aiCallFeedback && (
+            <div
+              className={`p-2.5 rounded-xl text-xs font-medium flex items-center gap-2 ${
+                aiCallFeedback.type === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                  : 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+              }`}
+            >
+              <Bot className="w-4 h-4 shrink-0" />
+              <span>{aiCallFeedback.message}</span>
+            </div>
+          )}
+
           {hasFollowup ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800/80">
-                <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                  {formatFollowupDate(lead.followup_date)}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800/80">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {formatFollowupDate(lead.followup_date)}
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 flex items-center gap-1 border border-violet-200 dark:border-violet-800">
+                  <Bot className="w-3 h-3" />
+                  <span>AI Auto-Call</span>
                 </span>
               </div>
+
+              {/* Voice AI Auto-Dial Banner */}
+              <div className="p-2.5 bg-violet-50/60 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/40 rounded-xl text-[11px] text-violet-800 dark:text-violet-300 flex items-start gap-2">
+                <Zap className="w-3.5 h-3.5 text-violet-600 mt-0.5 shrink-0" />
+                <span>
+                  <strong>Voice AI Auto-Dial Enabled:</strong> Voice Aura AI will automatically call this lead at the scheduled follow-up time.
+                </span>
+              </div>
+
               {lead.followup_notes && (
                 <div className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800/80">
                   <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Follow-up Notes</p>
                   <p className="whitespace-pre-wrap">{lead.followup_notes}</p>
                 </div>
               )}
-              <div className="flex gap-2">
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2 pt-1">
+                {/* Instant Trigger AI Call Now */}
                 <button
-                  onClick={() => {
-                    setActivityType('followup_call')
-                    setActivityDesc('Followup via Call')
-                    setActivityNotes(lead.followup_notes || '')
-                    setShowMarkDoneModal(true)
-                  }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                  onClick={handleTriggerAICallNow}
+                  disabled={triggeringAICall}
+                  className="w-full flex items-center justify-center gap-2 py-2 bg-gradient-to-r from-indigo-900 to-violet-800 hover:from-indigo-800 hover:to-violet-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50"
+                  title="Trigger Voice AI Call immediately"
                 >
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  Mark Done
+                  {triggeringAICall ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <PhoneCall className="w-3.5 h-3.5 text-violet-300" />
+                  )}
+                  <span>{triggeringAICall ? 'Initiating Voice AI Call...' : 'Trigger Voice AI Call Now'}</span>
                 </button>
-                <button
-                  onClick={handleClearFollowup}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-dashed border-red-200 dark:border-red-950 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 rounded-xl text-xs font-medium transition-colors"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Cancel
-                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setActivityType('followup_call')
+                      setActivityDesc('Followup via Call')
+                      setActivityNotes(lead.followup_notes || '')
+                      setShowMarkDoneModal(true)
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Mark Done
+                  </button>
+                  <button
+                    onClick={handleClearFollowup}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-dashed border-red-200 dark:border-red-950 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 rounded-xl text-xs font-medium transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="text-center py-4 bg-gray-50 dark:bg-gray-800/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
-              <p className="text-xs text-gray-500 mb-2">No active follow-up reminder</p>
-              <button
-                onClick={() => setShowFollowupModal(true)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400 dark:hover:bg-emerald-950 rounded-lg text-xs font-medium transition-colors"
-              >
-                <Calendar className="w-3 h-3" />
-                Schedule Reminder
-              </button>
+            <div className="text-center py-4 bg-gray-50 dark:bg-gray-800/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-800 space-y-2">
+              <p className="text-xs text-gray-500">No active follow-up reminder</p>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setShowFollowupModal(true)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400 dark:hover:bg-emerald-950 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <Calendar className="w-3 h-3" />
+                  Schedule Follow-up
+                </button>
+                <button
+                  onClick={handleTriggerAICallNow}
+                  disabled={triggeringAICall}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-950/50 dark:text-violet-400 dark:hover:bg-violet-950 rounded-lg text-xs font-bold transition-colors"
+                >
+                  <PhoneCall className="w-3 h-3" />
+                  Call with AI Now
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1155,10 +1264,22 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
               <textarea
                 value={modalNotes}
                 onChange={(e) => setModalNotes(e.target.value)}
-                placeholder="Enter notes about this follow-up..."
+                placeholder="Enter notes for this follow-up..."
                 rows={3}
                 className="w-full text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded-xl p-3 border border-gray-200 dark:border-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder-gray-400"
               />
+            </div>
+
+            {/* Voice AI Auto-Call Notice */}
+            <div className="p-3 bg-violet-50/80 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-900/60 rounded-xl text-xs text-violet-800 dark:text-violet-300 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Bot className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                <span>Automated Voice AI Call</span>
+              </div>
+              <p className="text-[11px] text-violet-700 dark:text-violet-400 leading-relaxed">
+                When this scheduled date & time arrives, Voice Aura AI will automatically call{' '}
+                <strong>{lead?.name || conversation?.name || 'this lead'}</strong> ({lead?.phone_number || conversation?.phone_number}).
+              </p>
             </div>
 
             {/* Save Button */}
@@ -1174,14 +1295,14 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
                 type="button"
                 onClick={handleSaveFollowup}
                 disabled={savingFollowup || !modalDate}
-                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white rounded-xl font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 bg-gradient-to-r from-indigo-900 to-violet-800 hover:from-indigo-800 hover:to-violet-700 disabled:opacity-50 text-white rounded-xl font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
               >
                 {savingFollowup ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Save className="w-3.5 h-3.5" />
                 )}
-                Save
+                <span>Schedule & Enable Auto-Call</span>
               </button>
             </div>
           </div>

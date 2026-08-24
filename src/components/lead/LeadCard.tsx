@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, Tag, ArrowUpRight, UserPlus, RefreshCcw, MessageSquare, ChevronDown, Phone, ArrowRight } from 'lucide-react'
+import { Trash2, Tag, ArrowUpRight, UserPlus, RefreshCcw, MessageSquare, ChevronDown, Phone, ArrowRight, Bot, PhoneCall } from 'lucide-react'
 import { getLeadColumn } from './LeadBoard'
 
 interface LeadCardProps {
@@ -22,6 +22,37 @@ const STAGE_LABELS: Record<string, string> = {
 export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProps) {
   const router = useRouter()
   const [showStageMenu, setShowStageMenu] = useState(false)
+  const [callingAI, setCallingAI] = useState(false)
+  const [callDone, setCallDone] = useState(false)
+
+  const handleTriggerAICall = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!lead.phone_number) return
+    setCallingAI(true)
+    try {
+      const res = await fetch('/api/calls/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone_number: lead.phone_number,
+          name: lead.name || 'Lead',
+          lead_id: lead.id,
+          conversation_id: lead.conversation_id,
+          notes: lead.followup_notes || 'Triggered from Kanban card',
+        }),
+      })
+      if (res.ok) {
+        setCallDone(true)
+        setTimeout(() => setCallDone(false), 3000)
+      } else {
+        alert('Could not initiate Voice AI call')
+      }
+    } catch {
+      alert('Failed to connect to Voice AI server')
+    } finally {
+      setCallingAI(false)
+    }
+  }
 
   const formattedDate = lead.created_at
     ? new Date(lead.created_at)
@@ -177,16 +208,33 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
           </button>
 
           {lead.phone_number && (
-            <a
-              href={`https://wa.me/${lead.phone_number.replace(/\D/g, '')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="p-1 hover:text-emerald-600 transition-colors"
-              title="Chat on WhatsApp"
-            >
-              <Phone className="w-3 h-3 text-emerald-600" />
-            </a>
+            <>
+              <a
+                href={`https://wa.me/${lead.phone_number.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="p-1 hover:text-emerald-600 transition-colors"
+                title="Chat on WhatsApp"
+              >
+                <Phone className="w-3 h-3 text-emerald-600" />
+              </a>
+
+              <button
+                onClick={handleTriggerAICall}
+                disabled={callingAI}
+                className={`p-1 transition-colors ${
+                  callDone
+                    ? 'text-emerald-600 font-bold'
+                    : callingAI
+                    ? 'text-violet-500 animate-spin'
+                    : 'text-violet-500 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/40 rounded'
+                }`}
+                title={callDone ? 'AI Call Initiated' : 'Trigger Voice AI Call'}
+              >
+                {callingAI ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+              </button>
+            </>
           )}
           <button
             onClick={(e) => {
