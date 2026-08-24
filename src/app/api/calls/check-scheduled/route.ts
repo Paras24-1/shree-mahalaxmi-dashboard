@@ -20,7 +20,7 @@ async function handleCheck(req: NextRequest) {
     // 1. Fetch leads where followup_date <= now, followup_date >= yesterday, and followup_notified is false (or null)
     const { data: dueLeads, error: leadsErr } = await supabaseAdmin
       .from('leads')
-      .select('id, name, phone_number, conversation_id, followup_date, followup_notes, followup_notified')
+      .select('id, name, phone_number, conversation_id, followup_date, followup_notes, followup_notified, followup_action_type')
       .not('followup_date', 'is', null)
       .lte('followup_date', nowISO)
       .gte('followup_date', yesterday)
@@ -46,6 +46,36 @@ async function handleCheck(req: NextRequest) {
             phone = conv.phone_number
             if (!lead.name) lead.name = conv.name
           }
+        }
+
+        const actionType = lead.followup_action_type || 'manual'
+
+        // If action type is NOT voice_ai, do NOT auto-dial customer!
+        if (actionType !== 'voice_ai') {
+          // Just mark notified and record scheduled reminder activity
+          await supabaseAdmin
+            .from('leads')
+            .update({
+              followup_notified: true,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', lead.id)
+
+          try {
+            await supabaseAdmin.from('lead_activities').insert({
+              lead_id: lead.id,
+              activity_type: actionType === 'whatsapp' ? 'message' : 'note',
+              description: `Follow-up reminder due (${actionType === 'whatsapp' ? 'WhatsApp Reminder' : 'Manual Employee Call'})`,
+              notes: lead.followup_notes || 'Follow-up notification due',
+            })
+          } catch {}
+
+          results.push({
+            lead_id: lead.id,
+            action: actionType,
+            status: 'reminder_notified_no_call',
+          })
+          continue
         }
 
         if (!phone) {

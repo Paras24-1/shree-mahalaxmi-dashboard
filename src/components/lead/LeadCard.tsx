@@ -22,6 +22,7 @@ import {
   X,
   Plus,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-react'
 import { getLeadColumn } from './LeadBoard'
 
@@ -109,6 +110,9 @@ function LeadCardComponent({
   // Reminder form state
   const [reminderDate, setReminderDate] = useState(lead.followup_date || '')
   const [reminderNotes, setReminderNotes] = useState(lead.followup_notes || '')
+  const [followupActionType, setFollowupActionType] = useState<'voice_ai' | 'manual' | 'whatsapp'>(
+    lead.followup_action_type || 'voice_ai'
+  )
   const [savingReminder, setSavingReminder] = useState(false)
 
   // Notes form state
@@ -120,7 +124,8 @@ function LeadCardComponent({
     setLeadNoteText(lead.notes || '')
     setReminderDate(lead.followup_date || '')
     setReminderNotes(lead.followup_notes || '')
-  }, [lead.notes, lead.followup_date, lead.followup_notes])
+    setFollowupActionType(lead.followup_action_type || 'voice_ai')
+  }, [lead.notes, lead.followup_date, lead.followup_notes, lead.followup_action_type])
 
   // AI Summary State
   const [summaryData, setSummaryData] = useState<any>(null)
@@ -199,6 +204,7 @@ function LeadCardComponent({
       const updates = {
         followup_date: reminderDate || null,
         followup_notes: reminderNotes || null,
+        followup_action_type: followupActionType,
         followup_notified: false,
         stage: reminderDate ? 'processing' : lead.stage,
       }
@@ -473,11 +479,17 @@ function LeadCardComponent({
               e.stopPropagation()
               setShowReminderModal(true)
             }}
-            className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300 text-xs font-semibold mb-2.5 hover:bg-purple-100 transition-colors"
+            className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold mb-2.5 transition-colors ${
+              lead.followup_action_type === 'manual'
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100'
+                : lead.followup_action_type === 'whatsapp'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100'
+                : 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300 hover:bg-purple-100'
+            }`}
             title="Click to edit reminder"
           >
             <div className="flex items-center gap-1.5 truncate">
-              <Clock className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <Clock className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">
                 ⏰ Reminder:{' '}
                 {new Date(lead.followup_date).toLocaleString('en-GB', {
@@ -490,8 +502,20 @@ function LeadCardComponent({
               </span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-200 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200">
-                Voice AI Auto-Call
+              <span
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                  lead.followup_action_type === 'manual'
+                    ? 'bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200'
+                    : lead.followup_action_type === 'whatsapp'
+                    ? 'bg-emerald-200 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200'
+                    : 'bg-purple-200 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200'
+                }`}
+              >
+                {lead.followup_action_type === 'manual'
+                  ? '👤 Manual Call'
+                  : lead.followup_action_type === 'whatsapp'
+                  ? '💬 WhatsApp'
+                  : '🤖 Voice AI Auto-Call'}
               </span>
             </div>
           </div>
@@ -908,13 +932,89 @@ function LeadCardComponent({
                 />
               </div>
 
-              {/* Voice AI Auto-Dial Info */}
-              <div className="p-2.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/40 flex items-center gap-2 text-purple-900 dark:text-purple-200">
-                <Bot className="w-4 h-4 text-purple-600 shrink-0" />
-                <span className="text-[11px] leading-tight">
-                  Voice AI will automatically call <strong>{lead.phone_number || leadName}</strong> at this exact time!
-                </span>
+              {/* Follow-up Action Selection */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1.5">
+                  Action on Scheduled Time
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFollowupActionType('voice_ai')}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      followupActionType === 'voice_ai'
+                        ? 'bg-purple-50 dark:bg-purple-950/60 border-purple-500 text-purple-900 dark:text-purple-200 font-bold ring-2 ring-purple-500/20'
+                        : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 font-semibold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs mb-0.5 text-purple-600">
+                      <Bot className="w-3.5 h-3.5" />
+                      <span>Voice AI Call</span>
+                    </div>
+                    <p className="text-[10px] opacity-75 font-normal leading-tight">Auto-dials lead</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFollowupActionType('manual')}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      followupActionType === 'manual'
+                        ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-500 text-amber-900 dark:text-amber-200 font-bold ring-2 ring-amber-500/20'
+                        : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 font-semibold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs mb-0.5 text-amber-600">
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>Manual Call</span>
+                    </div>
+                    <p className="text-[10px] opacity-75 font-normal leading-tight">Remind agent</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFollowupActionType('whatsapp')}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      followupActionType === 'whatsapp'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-bold ring-2 ring-emerald-500/20'
+                        : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 font-semibold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs mb-0.5 text-emerald-600">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>WhatsApp</span>
+                    </div>
+                    <p className="text-[10px] opacity-75 font-normal leading-tight">Chat reminder</p>
+                  </button>
+                </div>
               </div>
+
+              {/* Dynamic Info Banner */}
+              {followupActionType === 'voice_ai' && (
+                <div className="p-2.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/40 flex items-center gap-2 text-purple-900 dark:text-purple-200">
+                  <Bot className="w-4 h-4 text-purple-600 shrink-0" />
+                  <span className="text-[11px] leading-tight">
+                    Voice AI will automatically call <strong>{lead.phone_number || leadName}</strong> at this exact time!
+                  </span>
+                </div>
+              )}
+
+              {followupActionType === 'manual' && (
+                <div className="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 flex items-center gap-2 text-amber-900 dark:text-amber-200">
+                  <Phone className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="text-[11px] leading-tight">
+                    Voice AI will <strong>NOT</strong> auto-call. An alert will remind the agent to call manually.
+                  </span>
+                </div>
+              )}
+
+              {followupActionType === 'whatsapp' && (
+                <div className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 flex items-center gap-2 text-emerald-900 dark:text-emerald-200">
+                  <MessageSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-[11px] leading-tight">
+                    A reminder will prompt the team to send a WhatsApp follow-up at the scheduled time.
+                  </span>
+                </div>
+              )}
 
               <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
                 {lead.followup_date && (
