@@ -43,8 +43,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-col flex-1 overflow-hidden min-w-0 w-full h-full">
           <Topbar onOpenSidebar={() => setSidebarOpen(true)} />
           <main
-            className={`flex-1 overflow-y-auto p-2.5 sm:p-4 md:p-6 min-h-0 relative w-full ${
-              isChat ? 'pb-2 sm:pb-4' : 'pb-20 md:pb-6'
+            className={`flex-1 min-h-0 relative w-full ${
+              isChat
+                ? 'overflow-hidden flex flex-col p-2 sm:p-3 md:p-4 pb-20 md:pb-4'
+                : 'overflow-y-auto p-2.5 sm:p-4 md:p-6 pb-20 md:pb-6'
             }`}
           >
             {children}

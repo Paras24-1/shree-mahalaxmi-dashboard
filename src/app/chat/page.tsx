@@ -36,6 +36,7 @@ function ChatContent() {
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [lead, setLead] = useState<Lead | null>(null)
   const [mobileView, setMobileView] = useState<MobileView>('list')
+  const [showDesktopLeadPanel, setShowDesktopLeadPanel] = useState<boolean>(false)
   const { profile } = useAuth()
   const [dueReminder, setDueReminder] = useState<{
     leadId: string
@@ -174,7 +175,7 @@ function ChatContent() {
   }
 
   return (
-    <div className="h-[calc(100dvh-5.5rem)] md:h-[calc(100vh-115px)] flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+    <div className="h-full flex-1 min-h-0 flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
       {/* Mobile Sub-Header for switching between views */}
       <div className="md:hidden flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-850 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-2">
@@ -204,14 +205,14 @@ function ChatContent() {
         )}
       </div>
 
-      {/* Main 3-Pane Container */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      {/* Main 3-Pane Container (Optimized for Chromebooks, Laptops, Desktops, & Phones) */}
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Left Column: Conversation List */}
         <div
           className={`
             flex flex-col overflow-hidden border-r border-gray-200 dark:border-gray-800
             ${mobileView === 'list' ? 'flex w-full' : 'hidden'}
-            md:flex md:w-80 md:shrink-0
+            md:flex md:w-72 lg:w-80 md:shrink-0
           `}
         >
           <ConversationList
@@ -241,6 +242,8 @@ function ChatContent() {
                 setLead((prev) => (prev ? { ...prev, stage: newStage } : null))
               }
             }}
+            onToggleLeadPanel={() => setShowDesktopLeadPanel((v) => !v)}
+            showLeadPanel={showDesktopLeadPanel}
           />
         </div>
 
@@ -249,7 +252,7 @@ function ChatContent() {
           className={`
             flex flex-col overflow-hidden border-l border-gray-200 dark:border-gray-800
             ${mobileView === 'lead' ? 'flex w-full' : 'hidden'}
-            md:flex md:w-80 md:shrink-0
+            ${showDesktopLeadPanel ? 'md:flex md:w-80 md:shrink-0' : 'hidden 2xl:flex 2xl:w-80 2xl:shrink-0'}
           `}
         >
           <LeadPanel

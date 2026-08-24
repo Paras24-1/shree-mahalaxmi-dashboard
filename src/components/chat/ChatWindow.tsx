@@ -21,12 +21,15 @@ import {
   Target,
   Wrench,
   ArrowRight,
+  Info,
 } from 'lucide-react'
 
 interface Props {
   conversation: Conversation | null
   onAIToggle: (id: string, mode: boolean) => void
   onStageChange?: (id: string, stage: string) => void
+  onToggleLeadPanel?: () => void
+  showLeadPanel?: boolean
 }
 
 interface SummaryData {
@@ -38,7 +41,13 @@ interface SummaryData {
   sentiment: 'positive' | 'neutral' | 'inquiry' | 'urgent'
 }
 
-export default function ChatWindow({ conversation, onAIToggle, onStageChange }: Props) {
+export default function ChatWindow({
+  conversation,
+  onAIToggle,
+  onStageChange,
+  onToggleLeadPanel,
+  showLeadPanel,
+}: Props) {
   const [input, setInput] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -323,6 +332,22 @@ ${summaryData.keyPoints.map((p) => `  - ${p}`).join('\n')}
               ))}
             </select>
           </div>
+
+          {/* Lead Info Toggle Button */}
+          {onToggleLeadPanel && (
+            <button
+              onClick={onToggleLeadPanel}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                showLeadPanel
+                  ? 'bg-indigo-900 text-white shadow-xs'
+                  : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+              }`}
+              title="Toggle Lead Details"
+            >
+              <Info className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Lead Info</span>
+            </button>
+          )}
 
           {/* AI Toggle */}
           <button

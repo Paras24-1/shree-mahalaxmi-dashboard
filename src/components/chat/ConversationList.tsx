@@ -124,6 +124,13 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     )
   }, [conversations])
 
+  // Auto-select first conversation on laptop / Chromebook / desktop
+  useEffect(() => {
+    if (!selectedId && sortedConversations.length > 0 && typeof window !== 'undefined' && window.innerWidth >= 768) {
+      onSelect(sortedConversations[0])
+    }
+  }, [selectedId, sortedConversations, onSelect])
+
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     setConfirmId(id)
