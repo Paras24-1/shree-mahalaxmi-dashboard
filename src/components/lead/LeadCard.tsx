@@ -115,6 +115,13 @@ function LeadCardComponent({
   const [leadNoteText, setLeadNoteText] = useState<string>(lead.notes || '')
   const [savingNote, setSavingNote] = useState(false)
 
+  // Keep internal form state synchronized with incoming lead props
+  React.useEffect(() => {
+    setLeadNoteText(lead.notes || '')
+    setReminderDate(lead.followup_date || '')
+    setReminderNotes(lead.followup_notes || '')
+  }, [lead.notes, lead.followup_date, lead.followup_notes])
+
   // AI Summary State
   const [summaryData, setSummaryData] = useState<any>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)

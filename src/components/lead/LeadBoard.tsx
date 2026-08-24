@@ -178,7 +178,7 @@ export default function LeadBoard() {
           .limit(2000),
         supabase
           .from('conversations')
-          .select('id, name, phone_number, stage, assigned_to, created_at, updated_at')
+          .select('id, name, phone_number, stage, assigned_to, notes, created_at, updated_at')
           .order('updated_at', { ascending: false })
           .limit(2000),
         supabase
@@ -211,6 +211,7 @@ export default function LeadBoard() {
             source: 'WhatsApp Direct',
             assigned_to: c.assigned_to,
             assigned_to_name: empName || (c.assigned_to && !c.assigned_to.includes('-') ? c.assigned_to : 'Priyanka Kamble'),
+            notes: c.notes || null,
             created_at: c.created_at || c.updated_at || new Date().toISOString(),
           })
         })
@@ -235,6 +236,9 @@ export default function LeadBoard() {
             company_name: l.company_name || existing?.company_name || null,
             assigned_to: l.assigned_to || existing?.assigned_to,
             assigned_to_name: empName || existing?.assigned_to_name || (l.assigned_to && !l.assigned_to.includes('-') ? l.assigned_to : 'Priyanka Kamble'),
+            notes: l.notes || existing?.notes || null,
+            followup_date: l.followup_date || existing?.followup_date || null,
+            followup_notes: l.followup_notes || existing?.followup_notes || null,
             created_at: l.created_at || existing?.created_at,
           })
         })

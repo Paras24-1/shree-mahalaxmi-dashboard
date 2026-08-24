@@ -76,13 +76,45 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // Sync name, stage, or notes back to conversations table
+    // If lead doesn't exist yet in leads table, create/upsert it
+    if (!updatedLead && targetConvId) {
+      try {
+        const { data: conv } = await supabaseAdmin
+          .from('conversations')
+          .select('name, phone_number, stage, assigned_to')
+          .eq('id', targetConvId)
+          .maybeSingle()
+
+        const { data: inserted, error: insertError } = await supabaseAdmin
+          .from('leads')
+          .insert({
+            conversation_id: targetConvId,
+            name: conv?.name || null,
+            phone_number: conv?.phone_number || null,
+            stage: updates.stage || conv?.stage || 'new',
+            assigned_to: conv?.assigned_to || null,
+            source: 'WhatsApp Direct',
+            ...updates,
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .maybeSingle()
+
+        if (!insertError && inserted) {
+          updatedLead = inserted
+        }
+      } catch (upsertErr) {
+        console.error('Lead upsert failed:', upsertErr)
+      }
+    }
+
+    // Sync name, stage, and notes back to conversations table
     const convIdToSync = targetConvId || updatedLead?.conversation_id
     if (convIdToSync) {
       const convUpdates: Record<string, any> = {}
       if (updates.name) convUpdates.name = updates.name
       if (updates.stage) convUpdates.stage = updates.stage
-      if (updates.notes) convUpdates.notes = updates.notes
+      if (updates.notes !== undefined) convUpdates.notes = updates.notes
 
       if (Object.keys(convUpdates).length > 0) {
         await supabaseAdmin
