@@ -119,6 +119,8 @@ export default function LeadBoard() {
   const paramFilter = searchParams?.get('filter')
 
   const [leads, setLeads] = useState<any[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
+  const [employeeMap, setEmployeeMap] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStageTab, setActiveStageTab] = useState<string>('all')
@@ -164,11 +166,11 @@ export default function LeadBoard() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Unified Lead Loader: Combines leads table + conversations table for 100% complete & accurate data
+  // Unified Lead Loader: Combines leads table + conversations table + employee names
   const fetchLeads = async () => {
     setLoading(true)
     try {
-      const [leadsRes, convsRes] = await Promise.all([
+      const [leadsRes, convsRes, usersRes] = await Promise.all([
         supabase
           .from('leads')
           .select('*')
@@ -179,21 +181,36 @@ export default function LeadBoard() {
           .select('id, name, phone_number, stage, assigned_to, created_at, updated_at')
           .order('updated_at', { ascending: false })
           .limit(2000),
+        supabase
+          .from('users')
+          .select('id, name, email')
+          .limit(200),
       ])
+
+      const empMap = new Map<string, string>()
+      if (usersRes.data) {
+        setEmployees(usersRes.data)
+        usersRes.data.forEach((u) => {
+          if (u.id) empMap.set(u.id, u.name || u.email || 'Team Member')
+        })
+        setEmployeeMap(empMap)
+      }
 
       const leadMap = new Map<string, any>()
 
       // 1. Load all conversations as base leads
       if (convsRes.data) {
         convsRes.data.forEach((c) => {
+          const empName = c.assigned_to ? empMap.get(c.assigned_to) : null
           leadMap.set(c.id, {
             id: c.id,
             conversation_id: c.id,
             name: c.name || (c.phone_number ? `Lead ${c.phone_number.slice(-4)}` : 'Customer'),
             phone_number: c.phone_number,
             stage: c.stage || 'new',
-            source: 'India Mart',
+            source: 'WhatsApp Direct',
             assigned_to: c.assigned_to,
+            assigned_to_name: empName || (c.assigned_to && !c.assigned_to.includes('-') ? c.assigned_to : 'Priyanka Kamble'),
             created_at: c.created_at || c.updated_at || new Date().toISOString(),
           })
         })
@@ -204,6 +221,8 @@ export default function LeadBoard() {
         leadsRes.data.forEach((l) => {
           const key = l.conversation_id || l.id
           const existing = leadMap.get(key)
+          const empName = l.assigned_to ? empMap.get(l.assigned_to) : null
+
           leadMap.set(key, {
             ...existing,
             ...l,
@@ -214,6 +233,8 @@ export default function LeadBoard() {
             stage: l.stage || existing?.stage || 'new',
             source: l.source || existing?.source || 'India Mart',
             company_name: l.company_name || existing?.company_name || null,
+            assigned_to: l.assigned_to || existing?.assigned_to,
+            assigned_to_name: empName || existing?.assigned_to_name || (l.assigned_to && !l.assigned_to.includes('-') ? l.assigned_to : 'Priyanka Kamble'),
             created_at: l.created_at || existing?.created_at,
           })
         })
@@ -276,6 +297,13 @@ export default function LeadBoard() {
     } catch (err) {
       console.error('Failed to change stage:', err)
     }
+  }, [])
+
+  // Update Lead Details (Notes, Reminders, etc.)
+  const handleUpdateLead = useCallback((leadId: string, updates: Partial<any>) => {
+    setLeads((prev) =>
+      prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, ...updates } : l))
+    )
   }, [])
 
   // Delete Lead Handler
@@ -341,6 +369,8 @@ export default function LeadBoard() {
       Company: l.company_name || '',
       Source: l.source || '',
       Stage: l.stage || 'new',
+      'Follow-up Reminder': l.followup_date || '',
+      Notes: l.notes || '',
       'Created At': l.created_at || '',
     }))
 
@@ -384,7 +414,8 @@ export default function LeadBoard() {
         const phoneMatch = lead.phone_number?.toLowerCase().includes(q)
         const companyMatch = lead.company_name?.toLowerCase().includes(q)
         const sourceMatch = lead.source?.toLowerCase().includes(q)
-        if (!nameMatch && !phoneMatch && !companyMatch && !sourceMatch) return false
+        const notesMatch = lead.notes?.toLowerCase().includes(q)
+        if (!nameMatch && !phoneMatch && !companyMatch && !sourceMatch && !notesMatch) return false
       }
 
       // 2. Date filter
@@ -658,7 +689,7 @@ export default function LeadBoard() {
         <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
           type="text"
-          placeholder="Search"
+          placeholder="Search leads by name, phone, company, or notes..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400 shadow-2xs focus:outline-none focus:ring-2 focus:ring-purple-600 font-medium transition-all"
@@ -731,9 +762,11 @@ export default function LeadBoard() {
                   key={lead.id || lead.conversation_id}
                   lead={lead}
                   isSelected={selectedLeadIds.has(lead.id || lead.conversation_id)}
+                  employeeMap={employeeMap}
                   onToggleSelect={handleToggleSelect}
                   onDelete={handleDelete}
                   onStageChange={handleStageChange}
+                  onUpdateLead={handleUpdateLead}
                 />
               ))}
 
@@ -771,9 +804,11 @@ export default function LeadBoard() {
                     key={lead.id || lead.conversation_id}
                     lead={lead}
                     isSelected={selectedLeadIds.has(lead.id || lead.conversation_id)}
+                    employeeMap={employeeMap}
                     onToggleSelect={handleToggleSelect}
                     onDelete={handleDelete}
                     onStageChange={handleStageChange}
+                    onUpdateLead={handleUpdateLead}
                   />
                 ))}
               </LeadColumn>

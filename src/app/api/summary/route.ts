@@ -135,27 +135,61 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const conversationId = searchParams.get('conversation_id')
+    let conversationId = searchParams.get('conversation_id')
+    const phone = searchParams.get('phone')
 
-    if (!conversationId) {
-      return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
+    // If conversationId is not provided, look up by phone number
+    if (!conversationId && phone) {
+      const clean = phone.replace(/\D/g, '').slice(-10)
+      if (clean) {
+        const { data: conv } = await supabaseAdmin
+          .from('conversations')
+          .select('id')
+          .ilike('phone_number', `%${clean}%`)
+          .limit(1)
+          .maybeSingle()
+        if (conv?.id) {
+          conversationId = conv.id
+        }
+      }
+    }
+
+    if (!conversationId && !phone) {
+      return NextResponse.json({ error: 'conversation_id or phone is required' }, { status: 400 })
     }
 
     // 1. Fetch messages
-    const { data: messages, error: msgError } = await supabaseAdmin
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('timestamp', { ascending: true })
+    let messages: any[] = []
+    if (conversationId) {
+      const { data: msgData, error: msgError } = await supabaseAdmin
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('timestamp', { ascending: true })
 
-    if (msgError) throw msgError
+      if (!msgError && msgData) {
+        messages = msgData
+      }
+    }
 
     // 2. Fetch lead info
-    const { data: lead } = await supabaseAdmin
-      .from('leads')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .maybeSingle()
+    let lead = null
+    if (conversationId) {
+      const { data: leadData } = await supabaseAdmin
+        .from('leads')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .maybeSingle()
+      lead = leadData
+    } else if (phone) {
+      const clean = phone.replace(/\D/g, '').slice(-10)
+      const { data: leadData } = await supabaseAdmin
+        .from('leads')
+        .select('*')
+        .ilike('phone_number', `%${clean}%`)
+        .maybeSingle()
+      lead = leadData
+    }
 
     // 3. Generate summary
     const summary = generateSmartSummary(messages || [], lead)

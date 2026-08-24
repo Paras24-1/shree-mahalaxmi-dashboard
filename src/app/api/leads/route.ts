@@ -32,39 +32,67 @@ export async function GET(req: NextRequest) {
 }
 
 // PATCH /api/leads
-// Body: Partial<Lead> & { conversation_id }
+// Body: Partial<Lead> & { conversation_id?: string; lead_id?: string; id?: string }
 export async function PATCH(req: NextRequest) {
   try {
-    const { conversation_id, ...updates } = await req.json()
+    const body = await req.json()
+    const { conversation_id, lead_id, id, ...updates } = body
 
-    if (!conversation_id) {
+    const targetConvId = conversation_id || (lead_id ? undefined : id)
+    const targetLeadId = id || lead_id
+
+    if (!targetConvId && !targetLeadId) {
       return NextResponse.json(
-        { error: 'conversation_id is required' },
+        { error: 'conversation_id or lead id is required' },
         { status: 400 }
       )
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('leads')
-      .update(updates)
-      .eq('conversation_id', conversation_id)
-      .select()
-      .single()
+    let updatedLead = null
 
-    if (error) throw error
+    if (targetLeadId) {
+      const { data, error } = await supabaseAdmin
+        .from('leads')
+        .update(updates)
+        .eq('id', targetLeadId)
+        .select()
+        .maybeSingle()
 
-    // Sync name and stage back to conversations table
-    if (updates.name || updates.stage) {
-      await supabaseAdmin
-        .from('conversations')
-        .update({
-          ...(updates.name  ? { name: updates.name }   : {}),
-          ...(updates.stage ? { stage: updates.stage } : {}),
-        })
-        .eq('id', conversation_id)
+      if (!error && data) {
+        updatedLead = data
+      }
     }
 
-    return NextResponse.json(data)
+    if (!updatedLead && targetConvId) {
+      const { data, error } = await supabaseAdmin
+        .from('leads')
+        .update(updates)
+        .eq('conversation_id', targetConvId)
+        .select()
+        .maybeSingle()
+
+      if (!error && data) {
+        updatedLead = data
+      }
+    }
+
+    // Sync name, stage, or notes back to conversations table
+    const convIdToSync = targetConvId || updatedLead?.conversation_id
+    if (convIdToSync) {
+      const convUpdates: Record<string, any> = {}
+      if (updates.name) convUpdates.name = updates.name
+      if (updates.stage) convUpdates.stage = updates.stage
+      if (updates.notes) convUpdates.notes = updates.notes
+
+      if (Object.keys(convUpdates).length > 0) {
+        await supabaseAdmin
+          .from('conversations')
+          .update(convUpdates)
+          .eq('id', convIdToSync)
+      }
+    }
+
+    return NextResponse.json(updatedLead || { success: true, ...updates })
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error }, { status: 500 })
