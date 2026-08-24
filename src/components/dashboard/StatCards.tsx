@@ -82,13 +82,19 @@ export default function StatCards() {
           )
         )
 
-        // Followups: from followup_date today OR in processing stage
-        const processingFollowups = allUnifiedLeads.filter((l) =>
-          ['processing', 'in_process', 'followup'].includes((l.stage || '').toLowerCase())
-        )
-        const dateFollowups = allUnifiedLeads.filter((l) => l.followup_date && l.followup_date.startsWith(todayDateStr))
-        const totalFollowups = dateFollowups.length > 0 ? dateFollowups.length : processingFollowups.length
-        const completedFollowups = allUnifiedLeads.filter((l) => l.followup_notified).length
+        // Followups: strictly only leads where a follow-up reminder is explicitly set for today
+        const todayFollowups = allUnifiedLeads.filter((l) => {
+          if (!l.followup_date) return false
+          const fDate = new Date(l.followup_date)
+          if (isNaN(fDate.getTime())) return false
+          return (
+            fDate.getFullYear() === now.getFullYear() &&
+            fDate.getMonth() === now.getMonth() &&
+            fDate.getDate() === now.getDate()
+          )
+        })
+        const totalFollowups = todayFollowups.length
+        const completedFollowups = todayFollowups.filter((l) => l.followup_notified).length
 
         const allTasks = tasksRes.data || []
         const todayTasks = allTasks.filter(

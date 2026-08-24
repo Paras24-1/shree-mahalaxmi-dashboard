@@ -131,29 +131,12 @@ function FollowupsContent() {
 
       const allLeads = Array.from(map.values())
 
-      // Filter leads that are in follow-up pipeline:
-      // Either has scheduled followup_date OR is in 'processing'/'in_process'/'followup'/'callback_done_by_ai'
-      const followupLeads = allLeads.filter((l) => {
-        const isFollowupStage = [
-          'processing',
-          'in_process',
-          'followup',
-          'callback_done_by_ai',
-          'call_done',
-          'not_connected',
-        ].includes((l.stage || '').toLowerCase().trim())
-        const hasFollowupDate = Boolean(l.followup_date)
-        return hasFollowupDate || isFollowupStage
-      })
+      // Filter strictly for leads that have a follow-up reminder explicitly set
+      const followupLeads = allLeads.filter((l) => Boolean(l.followup_date))
 
-      // Sort by scheduled follow-up date (if any) or creation date
+      // Sort by scheduled follow-up date
       followupLeads.sort((a, b) => {
-        if (a.followup_date && b.followup_date) {
-          return new Date(a.followup_date).getTime() - new Date(b.followup_date).getTime()
-        }
-        if (a.followup_date) return -1
-        if (b.followup_date) return 1
-        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        return new Date(a.followup_date).getTime() - new Date(b.followup_date).getTime()
       })
 
       setFollowups(followupLeads)
@@ -269,7 +252,7 @@ function FollowupsContent() {
     }
   }
 
-  // Categorize Followups
+  // Categorize Followups strictly by scheduled date
   const categorized = useMemo(() => {
     const now = new Date()
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime()
@@ -278,22 +261,8 @@ function FollowupsContent() {
     let todayList: any[] = []
     let overdueList: any[] = []
     let upcomingList: any[] = []
-    let processingList: any[] = []
 
     followups.forEach((f) => {
-      const isProcessing = [
-        'processing',
-        'in_process',
-        'followup',
-        'callback_done_by_ai',
-        'call_done',
-        'not_connected',
-      ].includes((f.stage || '').toLowerCase().trim())
-
-      if (isProcessing) {
-        processingList.push(f)
-      }
-
       if (f.followup_date) {
         const time = new Date(f.followup_date).getTime()
         if (time < startOfToday) {
@@ -303,12 +272,6 @@ function FollowupsContent() {
         } else if (time > endOfToday) {
           upcomingList.push(f)
         }
-      } else if (isProcessing) {
-        // Leads in processing created today count as today followups
-        const createdTime = new Date(f.created_at || 0).getTime()
-        if (createdTime >= startOfToday) {
-          todayList.push(f)
-        }
       }
     })
 
@@ -317,7 +280,6 @@ function FollowupsContent() {
       today: todayList,
       overdue: overdueList,
       upcoming: upcomingList,
-      processing: processingList,
     }
   }, [followups])
 
@@ -327,7 +289,6 @@ function FollowupsContent() {
     if (activeTab === 'today') baseList = categorized.today
     else if (activeTab === 'overdue') baseList = categorized.overdue
     else if (activeTab === 'upcoming') baseList = categorized.upcoming
-    else if (activeTab === 'processing') baseList = categorized.processing
 
     if (!searchQuery.trim()) return baseList
     const q = searchQuery.toLowerCase().trim()
@@ -341,11 +302,10 @@ function FollowupsContent() {
   }, [categorized, activeTab, searchQuery])
 
   const TABS = [
-    { id: 'all', label: 'All Follow-ups', count: categorized.all.length, color: 'text-gray-700' },
+    { id: 'all', label: 'All Scheduled Follow-ups', count: categorized.all.length, color: 'text-gray-700' },
     { id: 'today', label: "Today's Follow-ups", count: categorized.today.length, color: 'text-red-600' },
     { id: 'overdue', label: 'Overdue', count: categorized.overdue.length, color: 'text-amber-600' },
     { id: 'upcoming', label: 'Upcoming', count: categorized.upcoming.length, color: 'text-purple-600' },
-    { id: 'processing', label: 'In Process Pipeline', count: categorized.processing.length, color: 'text-indigo-600' },
   ]
 
   return (
