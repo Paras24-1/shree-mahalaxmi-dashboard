@@ -9,7 +9,6 @@ export default function LeadPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 p-4 shadow-sm">
-        <LeadHeader />
         <Suspense
           fallback={
             <div className="flex-1 flex items-center justify-center py-24">
