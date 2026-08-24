@@ -169,6 +169,7 @@ export default function LeadBoard() {
   const [showCustomDateMenu, setShowCustomDateMenu] = useState(false)
   const [sourceFilter, setSourceFilter] = useState('All')
   const [stageFilter, setStageFilter] = useState('all')
+  const [activeMobileColumn, setActiveMobileColumn] = useState<string>('all')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [showReportsMenu, setShowReportsMenu] = useState(false)
   const [showFilterMenu, setShowFilterMenu] = useState(false)
@@ -887,10 +888,48 @@ export default function LeadBoard() {
         </div>
       )}
 
+      {/* Mobile Stage Selector Tabs (Phone only: fast thumb switching) */}
+      <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none mb-2">
+        <button
+          onClick={() => setActiveMobileColumn('all')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeMobileColumn === 'all'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+          }`}
+        >
+          All Stages ({filteredLeads.length})
+        </button>
+        {COLUMNS.map((col) => {
+          const count = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id).length
+          const isActive = activeMobileColumn === col.id
+          return (
+            <button
+              key={col.id}
+              onClick={() => setActiveMobileColumn(col.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                isActive
+                  ? 'bg-indigo-900 text-white shadow-xs'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+              }`}
+            >
+              <span>{col.title}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
       {/* Main View: Grid (Kanban) vs List (Table) */}
       {viewMode === 'grid' ? (
         <div className="flex-1 flex overflow-x-auto gap-4 pb-4 min-h-[500px]">
-          {COLUMNS.map((col) => {
+          {COLUMNS.filter((col) => activeMobileColumn === 'all' || activeMobileColumn === col.id).map((col) => {
             const columnLeads = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id)
 
             return (
