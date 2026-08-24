@@ -258,12 +258,12 @@ function ChatContent() {
         {/* Right Column: Lead Panel */}
         <div
           className={`
-            flex flex-col overflow-hidden border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900
-            ${mobileView === 'lead' ? 'flex w-full z-20' : 'hidden'}
+            flex flex-col overflow-hidden border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 h-full min-h-0
+            ${mobileView === 'lead' ? 'flex w-full z-20' : 'hidden md:hidden 2xl:flex'}
             ${
               showDesktopLeadPanel
-                ? 'md:flex md:absolute md:right-0 md:top-0 md:bottom-0 md:w-80 md:z-30 md:shadow-2xl xl:relative xl:shadow-none xl:z-auto xl:w-80 xl:shrink-0'
-                : 'hidden 2xl:flex 2xl:w-80 2xl:shrink-0'
+                ? '!flex md:absolute md:right-0 md:top-0 md:bottom-0 md:w-80 md:z-30 md:shadow-2xl xl:relative xl:shadow-none xl:z-auto xl:w-80 xl:shrink-0'
+                : '2xl:w-80 2xl:shrink-0'
             }
           `}
         >
