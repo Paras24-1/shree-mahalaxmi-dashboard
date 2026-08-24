@@ -1,68 +1,46 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+'use client'
+
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import LeadColumn from './LeadColumn'
 import LeadCard from './LeadCard'
+import LeadColumn from './LeadColumn'
 import {
+  ChevronLeft,
+  BarChart2,
+  Filter,
+  CloudDownload,
+  MoreVertical,
   Plus,
   Search,
-  Filter,
-  RefreshCw,
   X,
+  RefreshCw,
   Check,
-  FileText,
   Calendar,
-  Download,
-  BarChart2,
-  Printer,
+  SlidersHorizontal,
+  RotateCcw,
   LayoutGrid,
   List,
-  ChevronDown,
   Phone,
   MessageSquare,
   Trash2,
-  ArrowRight,
-  SlidersHorizontal,
-  RotateCcw,
 } from 'lucide-react'
-
-const COLUMNS = [
-  { id: 'new', title: 'New Leads', subtitle: 'Last 24 Hours', headerBg: 'bg-teal-700', colorClass: 'border-t-teal-700' },
-  { id: 'interested', title: 'Interested', subtitle: 'Hot & Interested Leads', headerBg: 'bg-lime-600', colorClass: 'border-t-lime-600' },
-  { id: 'processing', title: 'In Process', subtitle: 'Follow-up & Review', headerBg: 'bg-indigo-900', colorClass: 'border-t-indigo-900' },
-  { id: 'confirm', title: 'Confirm', subtitle: 'Converted / Closed', headerBg: 'bg-green-800', colorClass: 'border-t-green-800' },
-  { id: 'cancel', title: 'Cancel', subtitle: 'Not Interested', headerBg: 'bg-red-600', colorClass: 'border-t-red-600' },
-]
-
-const SOURCES = ['All', 'WhatsApp CRM', 'Face Book', 'India Mart', 'Google Ads', 'Referral']
-const STAGES = [
-  { id: 'all', label: 'All Stages' },
-  { id: 'new', label: 'New Leads' },
-  { id: 'interested', label: 'Interested' },
-  { id: 'processing', label: 'In Process' },
-  { id: 'confirm', label: 'Confirm' },
-  { id: 'cancel', label: 'Cancel' },
-]
 
 export function getLeadColumn(stage: string | undefined | null, createdAt?: string): string {
   const s = (stage || 'new').toLowerCase().trim()
 
-  // 1. Explicit Confirm / Deal Closed
   if (['confirm', 'confirmed', 'completed', 'deal_done', 'booked', 'won', 'closed'].includes(s)) {
     return 'confirm'
   }
 
-  // 2. Not Interested -> Cancel
   if (['cancel', 'cancelled', 'not_interested', 'lost', 'rejected', 'junk', 'low_budget'].includes(s)) {
     return 'cancel'
   }
 
-  // 3. Interested leads
   if (['interested', 'hot_customer', 'hot_lead', 'booking', 'proposal_sent', 'quotation', 'pricing', 'close_by', 'closeby'].includes(s)) {
     return 'interested'
   }
 
-  // 4. In Process / Follow-up
   if (
     [
       'processing',
@@ -77,18 +55,14 @@ export function getLeadColumn(stage: string | undefined | null, createdAt?: stri
     return 'processing'
   }
 
-  // 5. New leads:
-  // Fresh leads from last 24h go into "New", then after 24h move to "In Process" for review
   if (s === 'new' || !stage) {
     if (createdAt) {
       const createdTime = new Date(createdAt).getTime()
       if (!isNaN(createdTime)) {
         const ageHours = (Date.now() - createdTime) / (1000 * 60 * 60)
-        // If created within last 24 hours -> New Leads
         if (ageHours <= 24) {
           return 'new'
         }
-        // If older than 24 hours -> move to In Process for review (next 24 hours)
         return 'processing'
       }
     }
@@ -141,17 +115,7 @@ function matchesDateFilter(
   return true
 }
 
-function formatCustomDateLabel(start: string, end?: string): string {
-  if (!start) return 'Custom Date'
-  const [sY, sM, sD] = start.split('-').map(Number)
-  const d1 = new Date(sY, sM - 1, sD)
-  const f1 = d1.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-  if (!end || end === start) return f1
-  const [eY, eM, eD] = end.split('-').map(Number)
-  const d2 = new Date(eY, eM - 1, eD)
-  const f2 = d2.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-  return `${f1} - ${f2}`
-}
+const SOURCES = ['All', 'WhatsApp CRM', 'Face Book', 'India Mart', 'Google Ads', 'Referral']
 
 export default function LeadBoard() {
   const router = useRouter()
@@ -161,200 +125,176 @@ export default function LeadBoard() {
   const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeStageTab, setActiveStageTab] = useState<string>('all')
   const [dateFilter, setDateFilter] = useState<DateFilterType>(
     paramFilter === 'today' ? 'today' : paramFilter === 'yesterday' ? 'yesterday' : 'all'
   )
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
-  const [showCustomDateMenu, setShowCustomDateMenu] = useState(false)
   const [sourceFilter, setSourceFilter] = useState('All')
-  const [stageFilter, setStageFilter] = useState('all')
-  const [activeMobileColumn, setActiveMobileColumn] = useState<string>('all')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [showReportsMenu, setShowReportsMenu] = useState(false)
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<'card_list' | 'kanban'>('card_list')
+
+  // Modals & Menus
   const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
 
-  const reportsRef = useRef<HTMLDivElement>(null)
-  const filterRef = useRef<HTMLDivElement>(null)
-  const customDateRef = useRef<HTMLDivElement>(null)
+  // Add Lead Form State
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newCompany, setNewCompany] = useState('')
+  const [newSource, setNewSource] = useState('India Mart')
+  const [newStage, setNewStage] = useState('new')
+  const [savingLead, setSavingLead] = useState(false)
 
-  // Close dropdowns on outside click
+  const filterRef = useRef<HTMLDivElement>(null)
+  const moreRef = useRef<HTMLDivElement>(null)
+
+  // Close menus on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (reportsRef.current && !reportsRef.current.contains(event.target as Node)) {
-        setShowReportsMenu(false)
-      }
       if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
         setShowFilterMenu(false)
       }
-      if (customDateRef.current && !customDateRef.current.contains(event.target as Node)) {
-        setShowCustomDateMenu(false)
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) {
+        setShowMoreMenu(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Update date filter if query params change
-  useEffect(() => {
-    if (paramFilter === 'today') {
-      setDateFilter('today')
-    } else if (paramFilter === 'yesterday') {
-      setDateFilter('yesterday')
-    } else if (paramFilter === 'all') {
-      setDateFilter('all')
-    }
-  }, [paramFilter])
-
-  // New Lead form
-  const [newName, setNewName] = useState('')
-  const [newPhone, setNewPhone] = useState('')
-  const [newCompany, setNewCompany] = useState('')
-  const [newSource, setNewSource] = useState('Face Book')
-  const [newStage, setNewStage] = useState('new')
-  const [savingLead, setSavingLead] = useState(false)
-
-  const fetchLeads = useCallback(async () => {
+  // Fetch leads from Supabase
+  const fetchLeads = async () => {
     setLoading(true)
     try {
-      // 1. Fetch leads table
-      const { data: dbLeads } = await supabase
+      const { data, error } = await supabase
         .from('leads')
         .select('*')
         .order('created_at', { ascending: false })
+        .limit(2000)
 
-      // 2. Also fetch conversations to ensure any lead from WhatsApp with a stage is included
-      const { data: convs } = await supabase
-        .from('conversations')
-        .select('id, name, phone_number, stage, created_at, updated_at')
-        .order('updated_at', { ascending: false })
-
-      // Merge and deduplicate by phone/conversation_id
-      const leadMap = new Map<string, any>()
-
-      // First add conversations as baseline leads
-      if (convs) {
-        convs.forEach((c) => {
-          leadMap.set(c.id, {
-            id: c.id,
-            conversation_id: c.id,
-            name: c.name || c.phone_number,
-            phone_number: c.phone_number,
-            stage: c.stage || 'new',
-            source: 'WhatsApp CRM',
-            created_at: c.created_at || c.updated_at,
-          })
-        })
-      }
-
-      // Merge rich lead entries
-      if (dbLeads) {
-        dbLeads.forEach((l) => {
-          const key = l.conversation_id || l.id
-          const existing = leadMap.get(key)
-          leadMap.set(key, {
-            ...existing,
-            ...l,
-            id: l.id || existing?.id,
-            stage: l.stage || existing?.stage || 'new',
-          })
-        })
-      }
-
-      setLeads(Array.from(leadMap.values()))
+      if (error) throw error
+      setLeads(data || [])
     } catch (err) {
       console.error('Error fetching leads:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
     fetchLeads()
-  }, [fetchLeads])
 
-  // Move lead to new stage
-  const handleStageChange = async (leadId: string, targetStage: string) => {
-    // Optimistic UI update
-    setLeads((prev) =>
-      prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, stage: targetStage } : l))
-    )
+    // Real-time subscription
+    const channel = supabase
+      .channel(`leads-realtime-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setLeads((prev) => [payload.new, ...prev])
+          } else if (payload.eventType === 'UPDATE') {
+            setLeads((prev) => prev.map((l) => (l.id === payload.new.id ? { ...l, ...payload.new } : l)))
+          } else if (payload.eventType === 'DELETE') {
+            setLeads((prev) => prev.filter((l) => l.id !== payload.old.id))
+          }
+        }
+      )
+      .subscribe()
 
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  // Stage Change Handler
+  const handleStageChange = async (leadId: string, newStage: string) => {
     try {
-      // Update in Supabase
-      await supabase.from('leads').update({ stage: targetStage }).or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
-      await supabase.from('conversations').update({ stage: targetStage }).eq('id', leadId)
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, stage: newStage } : l))
+      )
+
+      await supabase
+        .from('leads')
+        .update({ stage: newStage, updated_at: new Date().toISOString() })
+        .or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
     } catch (err) {
-      console.error('Failed to update stage:', err)
+      console.error('Failed to change stage:', err)
     }
   }
 
+  // Delete Lead Handler
   const handleDelete = async (leadId: string) => {
-    if (!window.confirm('Delete this lead?')) return
-    setLeads((prev) => prev.filter((l) => l.id !== leadId && l.conversation_id !== leadId))
+    if (!window.confirm('Are you sure you want to delete this lead?')) return
     try {
-      await supabase.from('leads').delete().or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
+      setLeads((prev) => prev.filter((l) => l.id !== leadId && l.conversation_id !== leadId))
+      await supabase
+        .from('leads')
+        .delete()
+        .or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
     } catch (err) {
       console.error('Failed to delete lead:', err)
     }
   }
 
+  // Create Lead Handler
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newName.trim() && !newPhone.trim()) return
+    if (!newName.trim()) return
     setSavingLead(true)
-
     try {
       const { data, error } = await supabase
         .from('leads')
         .insert({
           name: newName.trim(),
-          phone_number: newPhone.trim(),
+          phone_number: newPhone.trim() || null,
           company_name: newCompany.trim() || null,
           source: newSource,
           stage: newStage,
+          created_at: new Date().toISOString(),
         })
         .select()
         .single()
 
-      if (!error && data) {
+      if (error) throw error
+      if (data) {
         setLeads((prev) => [data, ...prev])
-      } else {
-        await fetchLeads()
+        setShowAddModal(false)
+        setNewName('')
+        setNewPhone('')
+        setNewCompany('')
       }
-
-      setShowAddModal(false)
-      setNewName('')
-      setNewPhone('')
-      setNewCompany('')
-    } catch (err) {
-      console.error('Error creating lead:', err)
+    } catch (err: any) {
+      alert(err.message || 'Failed to create lead')
     } finally {
       setSavingLead(false)
     }
   }
 
-  const handleOpenChat = (lead: any) => {
-    const targetId = lead.conversation_id || lead.id || ''
-    const phone = lead.phone_number ? encodeURIComponent(lead.phone_number) : ''
-    router.push(`/chat?conversation_id=${targetId}&phone=${phone}`)
-  }
-
-  // Export to CSV
+  // Export CSV
   const handleExportCSV = () => {
-    setShowReportsMenu(false)
-    const headers = ['Lead Name', 'Phone Number', 'Company Name', 'Stage', 'Source', 'Created At']
-    const rows = filteredLeads.map((l) => [
-      `"${(l.name || '').replace(/"/g, '""')}"`,
-      `"${(l.phone_number || '').replace(/"/g, '""')}"`,
-      `"${(l.company_name || '').replace(/"/g, '""')}"`,
-      `"${(l.stage || 'new').replace(/"/g, '""')}"`,
-      `"${(l.source || 'WhatsApp CRM').replace(/"/g, '""')}"`,
-      `"${l.created_at ? new Date(l.created_at).toLocaleString() : ''}"`,
-    ])
+    const rows = filteredLeads.map((l) => ({
+      Name: l.name || '',
+      Phone: l.phone_number || '',
+      Company: l.company_name || '',
+      Source: l.source || '',
+      Stage: l.stage || 'new',
+      'Created At': l.created_at || '',
+    }))
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    if (rows.length === 0) {
+      alert('No leads to export')
+      return
+    }
+
+    const headers = Object.keys(rows[0]).join(',')
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers, ...rows.map((r) => Object.values(r).map((v) => `"${v}"`).join(','))].join('\n')
+
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
@@ -364,217 +304,200 @@ export default function LeadBoard() {
     document.body.removeChild(link)
   }
 
-  const todayCount = useMemo(() => leads.filter((l) => matchesDateFilter(l.created_at, 'today')).length, [leads])
-  const yesterdayCount = useMemo(() => leads.filter((l) => matchesDateFilter(l.created_at, 'yesterday')).length, [leads])
-  const thisWeekCount = useMemo(() => leads.filter((l) => matchesDateFilter(l.created_at, 'this_week')).length, [leads])
-
-  const activeFilterCount = (sourceFilter !== 'All' ? 1 : 0) + (stageFilter !== 'all' ? 1 : 0)
-
-  const filteredLeads = useMemo(() => {
-    return leads.filter((l) => {
-      // 1. Date filter
-      if (!matchesDateFilter(l.created_at, dateFilter, customStartDate, customEndDate)) return false
-
-      // 2. Source filter
-      if (sourceFilter !== 'All') {
-        const src = l.source || 'WhatsApp CRM'
-        if (src.toLowerCase() !== sourceFilter.toLowerCase()) return false
-      }
-
-      // 3. Stage filter
-      if (stageFilter !== 'all') {
-        const col = getLeadColumn(l.stage, l.created_at)
-        if (col !== stageFilter && (l.stage || 'new').toLowerCase() !== stageFilter.toLowerCase()) return false
-      }
-
-      // 4. Search query
-      if (!searchQuery.trim()) return true
-      const q = searchQuery.toLowerCase()
-      return (
-        (l.name && l.name.toLowerCase().includes(q)) ||
-        (l.phone_number && l.phone_number.includes(q)) ||
-        (l.company_name && l.company_name.toLowerCase().includes(q))
-      )
+  // Toggle selection
+  const handleToggleSelect = (id: string) => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
     })
-  }, [leads, searchQuery, dateFilter, customStartDate, customEndDate, sourceFilter, stageFilter])
+  }
+
+  // Filtered Leads
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      // 1. Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        const nameMatch = lead.name?.toLowerCase().includes(q)
+        const phoneMatch = lead.phone_number?.toLowerCase().includes(q)
+        const companyMatch = lead.company_name?.toLowerCase().includes(q)
+        const sourceMatch = lead.source?.toLowerCase().includes(q)
+        if (!nameMatch && !phoneMatch && !companyMatch && !sourceMatch) return false
+      }
+
+      // 2. Date filter
+      if (!matchesDateFilter(lead.created_at, dateFilter, customStartDate, customEndDate)) {
+        return false
+      }
+
+      // 3. Source filter
+      if (sourceFilter !== 'All' && lead.source !== sourceFilter) {
+        return false
+      }
+
+      // 4. Stage Tab filter
+      if (activeStageTab !== 'all') {
+        const col = getLeadColumn(lead.stage, lead.created_at)
+        if (col !== activeStageTab) return false
+      }
+
+      return true
+    })
+  }, [leads, searchQuery, dateFilter, customStartDate, customEndDate, sourceFilter, activeStageTab])
+
+  // Count calculations for Status Tabs
+  const stageCounts = useMemo(() => {
+    const dateFiltered = leads.filter((l) =>
+      matchesDateFilter(l.created_at, dateFilter, customStartDate, customEndDate)
+    )
+
+    let totalAll = dateFiltered.length
+    let newCount = 0
+    let processingCount = 0
+    let interestedCount = 0
+    let confirmCount = 0
+    let cancelCount = 0
+
+    dateFiltered.forEach((l) => {
+      const col = getLeadColumn(l.stage, l.created_at)
+      if (col === 'new') newCount++
+      else if (col === 'processing') processingCount++
+      else if (col === 'interested') interestedCount++
+      else if (col === 'confirm') confirmCount++
+      else if (col === 'cancel') cancelCount++
+    })
+
+    return {
+      all: totalAll,
+      new: newCount,
+      processing: processingCount,
+      interested: interestedCount,
+      confirm: confirmCount,
+      cancel: cancelCount,
+    }
+  }, [leads, dateFilter, customStartDate, customEndDate])
+
+  const STAGE_TABS = [
+    { id: 'all', label: 'All', count: stageCounts.all, dotColor: 'bg-purple-500', amount: '0.0' },
+    { id: 'new', label: 'New', count: stageCounts.new, dotColor: 'bg-sky-500', amount: '0.0' },
+    { id: 'processing', label: 'Processing', count: stageCounts.processing, dotColor: 'bg-indigo-500', amount: '0.0' },
+    { id: 'interested', label: 'Interested', count: stageCounts.interested, dotColor: 'bg-lime-500', amount: '0.0' },
+    { id: 'confirm', label: 'Confirm', count: stageCounts.confirm, dotColor: 'bg-emerald-500', amount: '0.0' },
+    { id: 'cancel', label: 'Cancel', count: stageCounts.cancel, dotColor: 'bg-rose-500', amount: '0.0' },
+  ]
+
+  const activeFilterCount = (sourceFilter !== 'All' ? 1 : 0) + (dateFilter !== 'all' ? 1 : 0)
 
   if (loading && leads.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center py-24">
-        <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+        <RefreshCw className="w-8 h-8 text-purple-600 animate-spin" />
       </div>
     )
   }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Top Header Bar */}
-      <div className="flex items-center justify-between py-2 sm:py-3 mb-2 flex-wrap gap-2 border-b border-gray-100 dark:border-gray-800 pb-3">
+      {/* 1. Purple Gradient Header (Exact match to screenshot) */}
+      <div className="bg-gradient-to-r from-[#6A1B9A] via-[#7B1FA2] to-[#4A148C] text-white px-4 py-3 rounded-2xl shadow-md flex items-center justify-between mb-3.5">
         <div className="flex items-center gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Leads</h2>
-          <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-            {filteredLeads.length}
-          </span>
+          <button
+            onClick={() => router.back()}
+            className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+            title="Go Back"
+          >
+            <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+          </button>
+          <h1 className="text-base sm:text-lg font-bold tracking-tight">Leads</h1>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          {/* Reports Dropdown */}
-          <div className="relative" ref={reportsRef}>
-            <button
-              onClick={() => {
-                setShowReportsMenu((v) => !v)
-                setShowFilterMenu(false)
-              }}
-              className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-xs font-semibold transition-all ${
-                showReportsMenu
-                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
-            >
-              <FileText className="w-4 h-4 text-indigo-500" />
-              <span>Reports</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 ml-0.5 transition-transform ${showReportsMenu ? 'rotate-180' : ''}`} />
-            </button>
+        <div className="flex items-center gap-3 sm:gap-4 text-white">
+          {/* Analytics Icon */}
+          <button
+            onClick={() => router.push('/reports')}
+            className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+            title="Business Analytics & Reports"
+          >
+            <BarChart2 className="w-4 h-4" />
+          </button>
 
-            {showReportsMenu && (
-              <div className="absolute right-0 mt-1.5 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl py-1.5 z-40 text-xs animate-in fade-in slide-in-from-top-2 duration-150">
-                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                  Lead Reports & Exports
-                </div>
-                <button
-                  onClick={handleExportCSV}
-                  className="w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-700 dark:text-gray-200"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Export to CSV ({filteredLeads.length})</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowReportsMenu(false)
-                    router.push('/analytics')
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-700 dark:text-gray-200"
-                >
-                  <BarChart2 className="w-3.5 h-3.5 text-violet-500" />
-                  <span>Voice & Lead Analytics</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowReportsMenu(false)
-                    window.print()
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-700 dark:text-gray-200 border-t border-gray-100 dark:border-gray-800"
-                >
-                  <Printer className="w-3.5 h-3.5 text-gray-500" />
-                  <span>Print Summary</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Filter Dropdown */}
+          {/* Filter Icon */}
           <div className="relative" ref={filterRef}>
             <button
-              onClick={() => {
-                setShowFilterMenu((v) => !v)
-                setShowReportsMenu(false)
-              }}
-              className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-xs font-semibold transition-all ${
-                showFilterMenu || activeFilterCount > 0
-                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
+              onClick={() => setShowFilterMenu((v) => !v)}
+              className="p-1 hover:bg-white/10 rounded-lg transition-colors relative"
+              title="Filter Leads"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Filter</span>
+              <Filter className="w-4 h-4" />
               {activeFilterCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-bold">
-                  {activeFilterCount}
-                </span>
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400" />
               )}
-              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 ml-0.5 transition-transform ${showFilterMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {showFilterMenu && (
-              <div className="absolute right-0 mt-1.5 w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl p-3 z-40 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl p-4 z-50 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 text-gray-800 dark:text-gray-200">
                 <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
                   <span className="font-bold text-gray-900 dark:text-white">Filter Leads</span>
-                  {(sourceFilter !== 'All' || stageFilter !== 'all' || dateFilter !== 'all') && (
+                  {activeFilterCount > 0 && (
                     <button
                       onClick={() => {
                         setSourceFilter('All')
-                        setStageFilter('all')
                         setDateFilter('all')
                         setCustomStartDate('')
                         setCustomEndDate('')
                       }}
-                      className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1 font-semibold"
+                      className="text-[11px] text-purple-600 hover:underline flex items-center gap-1 font-semibold"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      Reset All
+                      Reset
                     </button>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                     Date Range
                   </label>
                   <select
                     value={dateFilter}
-                    onChange={(e) => {
-                      const val = e.target.value as DateFilterType
-                      setDateFilter(val)
-                      if (val !== 'custom') {
-                        setCustomStartDate('')
-                        setCustomEndDate('')
-                      }
-                    }}
-                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => setDateFilter(e.target.value as DateFilterType)}
+                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 font-semibold"
                   >
                     <option value="all">All Dates ({leads.length})</option>
-                    <option value="today">Today's Leads ({todayCount})</option>
-                    <option value="yesterday">Yesterday ({yesterdayCount})</option>
-                    <option value="this_week">Last 7 Days ({thisWeekCount})</option>
-                    <option value="custom">Custom Date / Date Range</option>
+                    <option value="today">Today's Leads</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="this_week">Last 7 Days</option>
+                    <option value="custom">Custom Date</option>
                   </select>
                 </div>
 
                 {dateFilter === 'custom' && (
-                  <div className="space-y-2 pt-1 border-t border-gray-100 dark:border-gray-800">
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-0.5">
-                        Specific Date (From) *
-                      </label>
-                      <input
-                        type="date"
-                        value={customStartDate}
-                        onChange={(e) => setCustomStartDate(e.target.value)}
-                        className="w-full p-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-0.5">
-                        To Date (Optional)
-                      </label>
-                      <input
-                        type="date"
-                        value={customEndDate}
-                        onChange={(e) => setCustomEndDate(e.target.value)}
-                        className="w-full p-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
+                  <div className="space-y-2 pt-1">
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full p-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-950 text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full p-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-950 text-xs"
+                    />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                     Lead Source
                   </label>
                   <select
                     value={sourceFilter}
                     onChange={(e) => setSourceFilter(e.target.value)}
-                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 font-semibold"
                   >
                     {SOURCES.map((s) => (
                       <option key={s} value={s}>
@@ -584,493 +507,194 @@ export default function LeadBoard() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                    Pipeline Stage
-                  </label>
-                  <select
-                    value={stageFilter}
-                    onChange={(e) => setStageFilter(e.target.value)}
-                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {STAGES.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="pt-1 flex gap-2">
-                  <button
-                    onClick={() => setShowFilterMenu(false)}
-                    className="w-full py-1.5 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl font-bold text-xs shadow-sm transition-colors text-center"
-                  >
-                    Apply Filter
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowFilterMenu(false)}
+                  className="w-full py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold shadow-xs text-center"
+                >
+                  Apply Filters
+                </button>
               </div>
             )}
           </div>
 
-          {/* View Toggle (Grid / List) */}
-          <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-2xs">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold'
-                  : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
-              title="Kanban Board View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 transition-colors border-l border-gray-200 dark:border-gray-700 ${
-                viewMode === 'list'
-                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold'
-                  : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
-              title="Table / List View"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
+          {/* Export / Download Icon */}
+          <button
+            onClick={handleExportCSV}
+            className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+            title="Download CSV"
+          >
+            <CloudDownload className="w-4 h-4" />
+          </button>
 
-      {/* Action Sub-bar with Search & Date Tabs */}
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search leads by name, phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-7 py-1.5 text-xs border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48 sm:w-64"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
-                <X className="w-3 h-3" />
-              </button>
+          {/* Three Dots More Menu */}
+          <div className="relative" ref={moreRef}>
+            <button
+              onClick={() => setShowMoreMenu((v) => !v)}
+              className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+              title="More Actions"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {showMoreMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl py-1.5 z-50 text-xs text-gray-800 dark:text-gray-200">
+                <button
+                  onClick={() => {
+                    fetchLeads()
+                    setShowMoreMenu(false)
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Refresh Leads</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode(viewMode === 'card_list' ? 'kanban' : 'card_list')
+                    setShowMoreMenu(false)
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                >
+                  {viewMode === 'card_list' ? <LayoutGrid className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
+                  <span>Switch to {viewMode === 'card_list' ? 'Kanban View' : 'Card List View'}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleExportCSV()
+                    setShowMoreMenu(false)
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                >
+                  <CloudDownload className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
             )}
           </div>
 
-          {/* Date Filter Tabs */}
-          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 p-1 rounded-xl text-xs">
-            <button
-              onClick={() => {
-                setDateFilter('all')
-                setCustomStartDate('')
-                setCustomEndDate('')
-              }}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                dateFilter === 'all'
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
-              }`}
-            >
-              All ({leads.length})
-            </button>
-            <button
-              onClick={() => {
-                setDateFilter('today')
-                setCustomStartDate('')
-                setCustomEndDate('')
-              }}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
-                dateFilter === 'today'
-                  ? 'bg-green-600 text-white shadow-xs'
-                  : 'text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${dateFilter === 'today' ? 'bg-white animate-pulse' : 'bg-green-500'}`} />
-              <span>Today's Leads ({todayCount})</span>
-            </button>
-            <button
-              onClick={() => {
-                setDateFilter('yesterday')
-                setCustomStartDate('')
-                setCustomEndDate('')
-              }}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                dateFilter === 'yesterday'
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
-              }`}
-            >
-              Yesterday ({yesterdayCount})
-            </button>
-            <button
-              onClick={() => {
-                setDateFilter('this_week')
-                setCustomStartDate('')
-                setCustomEndDate('')
-              }}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                dateFilter === 'this_week'
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
-              }`}
-            >
-              7 Days ({thisWeekCount})
-            </button>
-
-            {/* Custom Date Filter Button & Popover */}
-            <div className="relative" ref={customDateRef}>
-              <button
-                onClick={() => setShowCustomDateMenu((v) => !v)}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
-                  dateFilter === 'custom'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>
-                  {dateFilter === 'custom' && customStartDate
-                    ? formatCustomDateLabel(customStartDate, customEndDate)
-                    : 'Custom Date'}
-                </span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${showCustomDateMenu ? 'rotate-180' : ''}`} />
-              </button>
-
-              {showCustomDateMenu && (
-                <div className="absolute left-0 sm:right-0 sm:left-auto mt-1.5 w-72 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl p-4 z-50 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
-                    <span className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-                      Find Leads by Date
-                    </span>
-                    <button
-                      onClick={() => setShowCustomDateMenu(false)}
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                      Specific Date (From) *
-                    </label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                      To Date (Optional Range)
-                    </label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                    />
-                  </div>
-
-                  <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomStartDate('')
-                        setCustomEndDate('')
-                        setDateFilter('all')
-                        setShowCustomDateMenu(false)
-                      }}
-                      className="flex-1 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold transition-colors text-center"
-                    >
-                      Reset
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!customStartDate}
-                      onClick={() => {
-                        if (customStartDate) {
-                          setDateFilter('custom')
-                          setShowCustomDateMenu(false)
-                        }
-                      }}
-                      className="flex-1 py-1.5 bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 text-white rounded-xl font-bold shadow-sm transition-colors text-center"
-                    >
-                      Apply Date
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
+          {/* Plus / Add Lead Icon */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+            className="p-1 bg-white/20 hover:bg-white/30 rounded-lg transition-colors font-bold"
+            title="Add Lead"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Lead</span>
-          </button>
-          <button
-            onClick={() => fetchLeads()}
-            className="p-1.5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 rounded-xl text-gray-600 dark:text-gray-400"
-            title="Refresh Leads"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Active Date Filter Notice Banner */}
-      {dateFilter === 'today' && (
-        <div className="flex items-center justify-between px-3.5 py-2 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl mb-3 text-xs text-green-800 dark:text-green-300">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="font-bold">Filtered by Today's Leads:</span>
-            <span>{filteredLeads.length} lead{filteredLeads.length === 1 ? '' : 's'} found</span>
-          </div>
+      {/* 2. Clean White Search Bar (Exact match to screenshot) */}
+      <div className="relative mb-3">
+        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          placeholder="Search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400 shadow-2xs focus:outline-none focus:ring-2 focus:ring-purple-600 font-medium transition-all"
+        />
+        {searchQuery && (
           <button
-            onClick={() => setDateFilter('all')}
-            className="text-xs font-bold underline hover:text-green-950 dark:hover:text-white flex items-center gap-1"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
           >
-            <span>Show All Leads ({leads.length})</span>
-            <X className="w-3 h-3" />
+            <X className="w-4 h-4" />
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {dateFilter === 'custom' && customStartDate && (
-        <div className="flex items-center justify-between px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl mb-3 text-xs text-indigo-800 dark:text-indigo-300">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-            <span className="font-bold">Filtered by Custom Date:</span>
-            <span>
-              {formatCustomDateLabel(customStartDate, customEndDate)} ({filteredLeads.length} lead
-              {filteredLeads.length === 1 ? '' : 's'} found)
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              setDateFilter('all')
-              setCustomStartDate('')
-              setCustomEndDate('')
-            }}
-            className="text-xs font-bold underline hover:text-indigo-950 dark:hover:text-white flex items-center gap-1"
-          >
-            <span>Show All Leads ({leads.length})</span>
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      )}
-
-      {dateFilter !== 'all' && dateFilter !== 'today' && dateFilter !== 'custom' && (
-        <div className="flex items-center justify-between px-3.5 py-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl mb-3 text-xs text-blue-800 dark:text-blue-300">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-3.5 h-3.5 text-blue-600" />
-            <span className="font-bold">Filtered by {dateFilter === 'yesterday' ? 'Yesterday' : 'Last 7 Days'}:</span>
-            <span>{filteredLeads.length} lead{filteredLeads.length === 1 ? '' : 's'}</span>
-          </div>
-          <button
-            onClick={() => setDateFilter('all')}
-            className="text-xs font-bold underline hover:text-blue-950 dark:hover:text-white flex items-center gap-1"
-          >
-            <span>Clear Filter</span>
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      )}
-
-      {/* Mobile Stage Selector Tabs (Phone only: fast thumb switching) */}
-      <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none mb-2">
-        <button
-          onClick={() => setActiveMobileColumn('all')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeMobileColumn === 'all'
-              ? 'bg-indigo-900 text-white shadow-xs'
-              : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-          }`}
-        >
-          All Stages ({filteredLeads.length})
-        </button>
-        {COLUMNS.map((col) => {
-          const count = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id).length
-          const isActive = activeMobileColumn === col.id
+      {/* 3. Horizontal Scrollable Stage Filter Chips / Cards */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none mb-3.5">
+        {STAGE_TABS.map((tab) => {
+          const isSelected = activeStageTab === tab.id
           return (
             <button
-              key={col.id}
-              onClick={() => setActiveMobileColumn(col.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                isActive
-                  ? 'bg-indigo-900 text-white shadow-xs'
-                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-              }`}
+              key={tab.id}
+              onClick={() => setActiveStageTab(tab.id)}
+              className={`
+                flex flex-col items-start px-3.5 py-2 rounded-xl border transition-all shrink-0 min-w-[105px]
+                ${
+                  isSelected
+                    ? 'bg-[#E3F2FD] dark:bg-sky-950/40 border-[#90CAF9] dark:border-sky-800 text-[#0D47A1] dark:text-sky-300 shadow-xs'
+                    : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50'
+                }
+              `}
             >
-              <span>{col.title}</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                }`}
-              >
-                {count}
-              </span>
+              <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
+                <span className={`w-1.5 h-1.5 rounded-full ${tab.dotColor}`} />
+                <span>
+                  {tab.label} ({tab.count})
+                </span>
+              </div>
+              <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
+                <span>💵</span>
+                <span>₹{tab.amount}</span>
+              </div>
             </button>
           )
         })}
       </div>
 
-      {/* Main View: Grid (Kanban) vs List (Table) */}
-      {viewMode === 'grid' ? (
+      {/* 4. Leads Cards View (Default) vs Kanban Board */}
+      {viewMode === 'card_list' ? (
+        <div className="flex-1 overflow-y-auto space-y-3 pb-12 pr-0.5">
+          {filteredLeads.length === 0 ? (
+            <div className="py-20 text-center text-gray-400">
+              <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-semibold">No leads found in this stage</p>
+              <button
+                onClick={() => {
+                  setActiveStageTab('all')
+                  setSearchQuery('')
+                  setDateFilter('all')
+                  setSourceFilter('All')
+                }}
+                className="mt-2 text-xs text-purple-600 font-bold hover:underline"
+              >
+                Clear all filters
+              </button>
+            </div>
+          ) : (
+            filteredLeads.map((lead) => (
+              <LeadCard
+                key={lead.id || lead.conversation_id}
+                lead={lead}
+                isSelected={selectedLeadIds.has(lead.id || lead.conversation_id)}
+                onToggleSelect={handleToggleSelect}
+                onDelete={handleDelete}
+                onStageChange={handleStageChange}
+              />
+            ))
+          )}
+        </div>
+      ) : (
+        /* Kanban View Option */
         <div className="flex-1 flex overflow-x-auto gap-4 pb-4 min-h-[500px]">
-          {COLUMNS.filter((col) => activeMobileColumn === 'all' || activeMobileColumn === col.id).map((col) => {
-            const columnLeads = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id)
-
+          {STAGE_TABS.filter((t) => t.id !== 'all').map((col) => {
+            const colLeads = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id)
             return (
               <LeadColumn
                 key={col.id}
-                title={col.title}
-                subtitle={col.subtitle}
-                count={columnLeads.length}
-                headerBg={col.headerBg}
-                colorClass={col.colorClass}
+                title={col.label}
+                subtitle={`${colLeads.length} leads`}
+                count={colLeads.length}
+                headerBg="bg-indigo-900"
+                colorClass="border-t-indigo-900"
                 onDrop={(leadId) => handleStageChange(leadId, col.id)}
               >
-                {columnLeads.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-gray-400 text-center">
-                    <span className="text-xs">No {col.title} Leads</span>
-                  </div>
-                ) : (
-                  columnLeads.map((lead) => (
-                    <LeadCard
-                      key={lead.id || lead.conversation_id}
-                      lead={lead}
-                      onDelete={handleDelete}
-                      onStageChange={handleStageChange}
-                    />
-                  ))
-                )}
+                {colLeads.map((lead) => (
+                  <LeadCard
+                    key={lead.id || lead.conversation_id}
+                    lead={lead}
+                    isSelected={selectedLeadIds.has(lead.id || lead.conversation_id)}
+                    onToggleSelect={handleToggleSelect}
+                    onDelete={handleDelete}
+                    onStageChange={handleStageChange}
+                  />
+                ))}
               </LeadColumn>
             )
           })}
-        </div>
-      ) : (
-        /* Table / List View */
-        <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-800 rounded-2xl bg-white dark:bg-gray-900 shadow-sm">
-          {filteredLeads.length === 0 ? (
-            <div className="py-24 text-center text-gray-400">
-              <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm font-semibold">No leads match the selected filter</p>
-            </div>
-          ) : (
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 font-bold uppercase tracking-wider">
-                  <th className="p-3.5">Lead Name</th>
-                  <th className="p-3.5">Phone (Direct Call)</th>
-                  <th className="p-3.5">Company</th>
-                  <th className="p-3.5">Source</th>
-                  <th className="p-3.5">Stage</th>
-                  <th className="p-3.5">Created Date</th>
-                  <th className="p-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {filteredLeads.map((lead) => {
-                  const currentColumn = getLeadColumn(lead.stage, lead.created_at)
-                  return (
-                    <tr
-                      key={lead.id || lead.conversation_id}
-                      onClick={() => handleOpenChat(lead)}
-                      className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50 cursor-pointer transition-colors group"
-                    >
-                      <td className="p-3.5 font-bold text-gray-900 dark:text-white">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs uppercase">
-                            {(lead.name || 'L')[0]}
-                          </div>
-                          <span>{lead.name || `Lead #${lead.phone_number?.slice(-4) || 'Contact'}`}</span>
-                        </div>
-                      </td>
-                      <td className="p-3.5" onClick={(e) => e.stopPropagation()}>
-                        {lead.phone_number ? (
-                          <a
-                            href={`tel:${lead.phone_number.replace(/\s+/g, '')}`}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 dark:bg-green-950/50 hover:bg-green-100 dark:hover:bg-green-900/50 text-green-700 dark:text-green-400 font-mono font-semibold border border-green-200 dark:border-green-800 transition-colors"
-                            title={`Call ${lead.phone_number}`}
-                          >
-                            <Phone className="w-3 h-3 text-green-600 dark:text-green-400" />
-                            <span>{lead.phone_number}</span>
-                          </a>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="p-3.5 text-gray-600 dark:text-gray-300">
-                        {lead.company_name || <span className="text-gray-400">-</span>}
-                      </td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-900/40">
-                          {lead.source || 'WhatsApp CRM'}
-                        </span>
-                      </td>
-                      <td className="p-3.5" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={currentColumn}
-                          onChange={(e) => handleStageChange(lead.id || lead.conversation_id, e.target.value)}
-                          className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-semibold text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="new">New Leads</option>
-                          <option value="interested">Interested</option>
-                          <option value="processing">In Process</option>
-                          <option value="confirm">Confirm</option>
-                          <option value="cancel">Cancel</option>
-                        </select>
-                      </td>
-                      <td className="p-3.5 text-gray-500 dark:text-gray-400 font-mono text-[11px]">
-                        {lead.created_at ? new Date(lead.created_at).toLocaleString() : '-'}
-                      </td>
-                      <td className="p-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenChat(lead)}
-                            className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors"
-                            title="Open Chat"
-                          >
-                            <MessageSquare className="w-4 h-4" />
-                          </button>
-                          {lead.phone_number && (
-                            <a
-                              href={`https://wa.me/${lead.phone_number.replace(/\D/g, '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-600 rounded-lg transition-colors"
-                              title="WhatsApp Chat"
-                            >
-                              <Phone className="w-4 h-4" />
-                            </a>
-                          )}
-                          <button
-                            onClick={() => handleDelete(lead.id || lead.conversation_id)}
-                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950 text-red-500 rounded-lg transition-colors"
-                            title="Delete Lead"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
         </div>
       )}
 
@@ -1094,7 +718,7 @@ export default function LeadBoard() {
                   placeholder="e.g. Ramesh Patel"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-purple-500 outline-none"
                   autoFocus
                 />
               </div>
@@ -1106,7 +730,7 @@ export default function LeadBoard() {
                   placeholder="+91 98765 43210"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
-                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-purple-500 outline-none font-mono"
                 />
               </div>
 
@@ -1117,7 +741,7 @@ export default function LeadBoard() {
                   placeholder="e.g. Shree Industries"
                   value={newCompany}
                   onChange={(e) => setNewCompany(e.target.value)}
-                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 focus:ring-2 focus:ring-purple-500 outline-none"
                 />
               </div>
 
@@ -1129,8 +753,8 @@ export default function LeadBoard() {
                     onChange={(e) => setNewSource(e.target.value)}
                     className="w-full p-2.5 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-950 outline-none font-semibold"
                   >
-                    <option value="Face Book">Face Book</option>
                     <option value="India Mart">India Mart</option>
+                    <option value="Face Book">Face Book</option>
                     <option value="Google Ads">Google Ads</option>
                     <option value="WhatsApp CRM">WhatsApp CRM</option>
                     <option value="Referral">Referral</option>
@@ -1164,7 +788,7 @@ export default function LeadBoard() {
                 <button
                   type="submit"
                   disabled={savingLead}
-                  className="flex-1 py-2.5 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl font-bold flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold flex items-center justify-center gap-1.5"
                 >
                   {savingLead ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                   <span>Save Lead</span>

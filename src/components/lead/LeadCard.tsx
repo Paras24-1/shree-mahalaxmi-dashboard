@@ -2,57 +2,63 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, Tag, ArrowUpRight, UserPlus, RefreshCcw, MessageSquare, ChevronDown, Phone, ArrowRight, Bot, PhoneCall } from 'lucide-react'
+import {
+  Phone,
+  MessageCircle,
+  TrendingUp,
+  RefreshCw,
+  Trash2,
+  Send,
+  MoreVertical,
+  Bot,
+  ChevronDown,
+  Check,
+  Building2,
+  Calendar,
+  User,
+  ExternalLink,
+} from 'lucide-react'
 import { getLeadColumn } from './LeadBoard'
 
 interface LeadCardProps {
   lead: any
+  isSelected?: boolean
+  onToggleSelect?: (id: string) => void
   onDelete?: (id: string) => void
   onStageChange?: (id: string, newStage: string) => void
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  new: 'New Leads (Last 24h)',
-  interested: 'Interested',
-  processing: 'In Process (Follow-up)',
-  confirm: 'Confirm',
-  cancel: 'Cancel (Not Interested)',
+const STAGE_BADGES: Record<string, { label: string; bg: string; text: string }> = {
+  new: { label: 'New', bg: 'bg-[#005f73]', text: 'text-white' },
+  interested: { label: 'Interested', bg: 'bg-[#2b9348]', text: 'text-white' },
+  processing: { label: 'Processing', bg: 'bg-[#1d3557]', text: 'text-white' },
+  confirm: { label: 'Confirm', bg: 'bg-[#007f5f]', text: 'text-white' },
+  cancel: { label: 'Cancel', bg: 'bg-[#d90429]', text: 'text-white' },
 }
 
-export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProps) {
+const STAGE_OPTIONS = [
+  { id: 'new', label: 'New Leads' },
+  { id: 'interested', label: 'Interested' },
+  { id: 'processing', label: 'In Process' },
+  { id: 'confirm', label: 'Confirm' },
+  { id: 'cancel', label: 'Cancel' },
+]
+
+export default function LeadCard({
+  lead,
+  isSelected = false,
+  onToggleSelect,
+  onDelete,
+  onStageChange,
+}: LeadCardProps) {
   const router = useRouter()
   const [showStageMenu, setShowStageMenu] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [callingAI, setCallingAI] = useState(false)
-  const [callDone, setCallDone] = useState(false)
+  const [callSuccess, setCallSuccess] = useState(false)
 
-  const handleTriggerAICall = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!lead.phone_number) return
-    setCallingAI(true)
-    try {
-      const res = await fetch('/api/calls/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone_number: lead.phone_number,
-          name: lead.name || 'Lead',
-          lead_id: lead.id,
-          conversation_id: lead.conversation_id,
-          notes: lead.followup_notes || 'Triggered from Kanban card',
-        }),
-      })
-      if (res.ok) {
-        setCallDone(true)
-        setTimeout(() => setCallDone(false), 3000)
-      } else {
-        alert('Could not initiate Voice AI call')
-      }
-    } catch {
-      alert('Failed to connect to Voice AI server')
-    } finally {
-      setCallingAI(false)
-    }
-  }
+  const currentColumn = getLeadColumn(lead.stage, lead.created_at)
+  const stageBadge = STAGE_BADGES[currentColumn] || { label: 'New', bg: 'bg-[#005f73]', text: 'text-white' }
 
   const formattedDate = lead.created_at
     ? new Date(lead.created_at)
@@ -64,13 +70,12 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
           minute: '2-digit',
         })
         .replace(',', '')
-    : ''
+    : '24-08-2026 17:15'
 
-  const currentColumn = getLeadColumn(lead.stage, lead.created_at)
-
-  const createdTime = lead.created_at ? new Date(lead.created_at).getTime() : 0
-  const ageHours = createdTime ? (Date.now() - createdTime) / (1000 * 60 * 60) : 999
-  const isLast24h = ageHours <= 24
+  const leadName = lead.name || (lead.phone_number ? `Lead ${lead.phone_number.slice(-4)}` : 'Customer')
+  const initial = leadName.trim().charAt(0).toUpperCase() || 'D'
+  const rawPhone = (lead.phone_number || '').replace(/\D/g, '')
+  const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone
 
   const handleOpenChat = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
@@ -79,178 +84,309 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
     router.push(`/chat?conversation_id=${targetId}&phone=${phone}`)
   }
 
+  const handleTriggerAICall = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!lead.phone_number) return
+    setCallingAI(true)
+    try {
+      const res = await fetch('/api/calls/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone_number: lead.phone_number,
+          name: leadName,
+          lead_id: lead.id,
+          conversation_id: lead.conversation_id,
+          notes: lead.followup_notes || 'Triggered from Leads section',
+        }),
+      })
+      if (res.ok) {
+        setCallSuccess(true)
+        setTimeout(() => setCallSuccess(false), 3000)
+      } else {
+        alert('Could not initiate Voice AI call')
+      }
+    } catch {
+      alert('Failed to connect to Voice AI server')
+    } finally {
+      setCallingAI(false)
+    }
+  }
+
   return (
     <div
       onClick={handleOpenChat}
-      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/80 rounded-xl shadow-2xs hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-600 transition-all cursor-pointer mb-3 overflow-hidden select-none group"
+      className={`
+        relative bg-white dark:bg-gray-900 border rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer mb-3.5 overflow-hidden select-none group
+        ${isSelected ? 'border-indigo-600 ring-2 ring-indigo-500/20' : 'border-gray-200 dark:border-gray-800'}
+        before:content-[''] before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1.5 before:bg-[#253B80] dark:before:bg-indigo-500 before:rounded-r-md
+      `}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('leadId', lead.id || lead.conversation_id)
       }}
     >
-      {/* Card Header */}
-      <div className="p-3.5 border-b border-gray-100 dark:border-gray-800">
-        <div className="flex items-start justify-between gap-2 mb-1.5">
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">
-              {lead.name || `Lead #${lead.phone_number?.slice(-4) || 'Contact'}`}
-            </h4>
-            <ArrowRight className="w-3 h-3 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      {/* Top Right Stage Badge */}
+      <div className="absolute top-0 right-0 z-10">
+        <span
+          className={`
+            inline-block text-[11px] font-bold px-3 py-0.5 rounded-bl-xl rounded-tr-2xl tracking-wide uppercase shadow-2xs
+            ${stageBadge.bg} ${stageBadge.text}
+          `}
+        >
+          {stageBadge.label}
+        </span>
+      </div>
+
+      {/* Main Card Content */}
+      <div className="p-4 pl-5">
+        {/* Top Header Row: Avatar, Name, Phone, Actions & Select Circle */}
+        <div className="flex items-start justify-between gap-3 mb-2 pr-14">
+          <div className="flex items-start gap-3">
+            {/* Avatar Circle */}
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-700 to-indigo-900 flex items-center justify-center text-white font-bold text-base shadow-sm shrink-0 mt-0.5">
+              {initial}
+            </div>
+
+            {/* Name & Phone Info */}
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                {leadName}
+              </h3>
+
+              {lead.phone_number && (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 font-mono">
+                    {lead.phone_number}
+                  </span>
+
+                  {/* Instant Call Icon */}
+                  <a
+                    href={`tel:${lead.phone_number.replace(/\s+/g, '')}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1 text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/50 rounded transition-colors"
+                    title="Direct Phone Call"
+                  >
+                    <Phone className="w-3.5 h-3.5 fill-current" />
+                  </a>
+
+                  {/* Instant WhatsApp Icon */}
+                  <a
+                    href={`https://wa.me/${cleanPhone}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 rounded transition-colors"
+                    title="WhatsApp Chat"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 fill-emerald-100 dark:fill-emerald-950" />
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Move Stage Dropdown */}
-          <div className="relative" onClick={(e) => e.stopPropagation()}>
+          {/* Selection Circle (Top Right before Badge) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleSelect?.(lead.id || lead.conversation_id)
+            }}
+            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+              isSelected
+                ? 'border-indigo-600 bg-indigo-600 text-white'
+                : 'border-gray-300 dark:border-gray-600 hover:border-indigo-500'
+            }`}
+            title="Select Lead"
+          >
+            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+          </button>
+        </div>
+
+        {/* Source Badge */}
+        <div className="mb-3">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-[#ECEEFE] dark:bg-indigo-950/60 text-[#3D47B4] dark:text-indigo-300 border border-[#DCE2FE] dark:border-indigo-900/40">
+            {lead.source || 'India Mart'}
+          </span>
+        </div>
+
+        {/* Key-Value Details Grid (Exact alignment as screenshot) */}
+        <div className="space-y-1.5 text-xs text-gray-700 dark:text-gray-300 font-medium pb-2">
+          <div className="grid grid-cols-[110px_12px_1fr] items-center">
+            <span className="text-gray-500 dark:text-gray-400">Company Name</span>
+            <span className="text-gray-400">:</span>
+            <span className="text-gray-900 dark:text-gray-100 truncate">
+              {lead.company_name || '-'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[110px_12px_1fr] items-center">
+            <span className="text-gray-500 dark:text-gray-400">Created Date</span>
+            <span className="text-gray-400">:</span>
+            <span className="text-gray-900 dark:text-gray-100 font-mono">
+              {formattedDate}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[110px_12px_1fr] items-center">
+            <span className="text-gray-500 dark:text-gray-400">Created By</span>
+            <span className="text-gray-400">:</span>
+            <span className="text-gray-900 dark:text-gray-100 truncate">
+              Shri Mahalaxmi Enterprises
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[110px_12px_1fr] items-center">
+            <span className="text-gray-500 dark:text-gray-400">Assign To</span>
+            <span className="text-gray-400">:</span>
+            <span className="text-gray-900 dark:text-gray-100 truncate">
+              {lead.assigned_to_name || lead.assigned_to || 'Priyanka Kamble'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[110px_12px_1fr] items-center">
+            <span className="text-gray-500 dark:text-gray-400">Reference</span>
+            <span className="text-gray-400">:</span>
+            <span className="text-gray-900 dark:text-gray-100 truncate">
+              {lead.reference || lead.source || 'India Mart'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[110px_12px_1fr] items-center">
+            <span className="text-gray-500 dark:text-gray-400">Lead Source</span>
+            <span className="text-gray-400">:</span>
+            <span className="text-gray-900 dark:text-gray-100 truncate capitalize">
+              {lead.source || 'Indiamart'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card Bottom Action Row (Matching screenshot icons) */}
+        <div className="pt-2.5 mt-2 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {/* Timeline / Analytics */}
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowStageMenu((v) => !v)
-              }}
-              className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 transition-colors"
-              title="Change Stage"
+              type="button"
+              onClick={handleOpenChat}
+              className="p-1.5 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/50 rounded-lg transition-colors"
+              title="View Activity Timeline"
             >
-              <span>{STAGE_LABELS[currentColumn]?.split(' ')[0] || 'Stage'}</span>
-              <ChevronDown className="w-2.5 h-2.5" />
+              <TrendingUp className="w-4 h-4" />
             </button>
 
-            {showStageMenu && (
-              <div className="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-30 text-xs">
-                {Object.entries(STAGE_LABELS).map(([stageKey, label]) => (
-                  <button
-                    key={stageKey}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onStageChange?.(lead.id || lead.conversation_id, stageKey)
-                      setShowStageMenu(false)
-                    }}
-                    className={`w-full text-left px-3 py-1.5 text-[11px] font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between ${
-                      currentColumn === stageKey ? 'text-indigo-600 font-bold bg-indigo-50/50' : 'text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    <span>{label}</span>
-                    {currentColumn === stageKey && <span className="text-indigo-600">●</span>}
-                  </button>
-                ))}
+            {/* Change Stage */}
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setShowStageMenu((v) => !v)}
+                className="p-1.5 text-orange-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/50 rounded-lg transition-colors"
+                title="Change Stage"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+
+              {showStageMenu && (
+                <div className="absolute left-0 bottom-8 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-30 text-xs">
+                  {STAGE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => {
+                        onStageChange?.(lead.id || lead.conversation_id, opt.id)
+                        setShowStageMenu(false)
+                      }}
+                      className={`w-full text-left px-3 py-1.5 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between ${
+                        currentColumn === opt.id ? 'text-indigo-600 bg-indigo-50/50' : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {currentColumn === opt.id && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Delete Lead */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete?.(lead.id || lead.conversation_id)
+              }}
+              className="p-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+              title="Delete Lead"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+
+            {/* Send Message / Chat with Badge */}
+            <button
+              type="button"
+              onClick={handleOpenChat}
+              className="relative p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors"
+              title="Open Chat"
+            >
+              <Send className="w-4 h-4" />
+              <span className="absolute -top-1 -right-1.5 text-[9px] font-bold text-gray-400">0</span>
+            </button>
+
+            {/* Voice AI Call Trigger */}
+            <button
+              type="button"
+              onClick={handleTriggerAICall}
+              disabled={callingAI}
+              className={`p-1.5 rounded-lg transition-colors ${
+                callSuccess
+                  ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950'
+                  : callingAI
+                  ? 'text-violet-600 animate-spin'
+                  : 'text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/50'
+              }`}
+              title={callSuccess ? 'AI Call Initiated!' : 'Trigger Voice AI Call'}
+            >
+              <Bot className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Three dots menu */}
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setShowMoreMenu((v) => !v)}
+              className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg transition-colors"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {showMoreMenu && (
+              <div className="absolute right-0 bottom-8 w-40 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-30 text-xs">
+                <button
+                  onClick={handleOpenChat}
+                  className="w-full text-left px-3 py-1.5 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                >
+                  View Details
+                </button>
+                <button
+                  onClick={handleTriggerAICall}
+                  className="w-full text-left px-3 py-1.5 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-violet-600 dark:text-violet-400"
+                >
+                  Voice AI Call
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowMoreMenu(false)
+                    onDelete?.(lead.id || lead.conversation_id)
+                  }}
+                  className="w-full text-left px-3 py-1.5 font-medium hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600"
+                >
+                  Delete Lead
+                </button>
               </div>
             )}
           </div>
         </div>
-
-        {lead.phone_number && (
-          <a
-            href={`tel:${lead.phone_number.replace(/\s+/g, '')}`}
-            onClick={(e) => e.stopPropagation()}
-            className="text-[11px] text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-mono font-medium mb-2 flex items-center gap-1.5 w-fit hover:underline transition-colors"
-            title={`Call ${lead.phone_number}`}
-          >
-            <Phone className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>{lead.phone_number}</span>
-          </a>
-        )}
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-900/40">
-            {lead.source || 'Face Book'}
-          </span>
-
-          {currentColumn === 'new' && isLast24h && (
-            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
-              ⚡ &lt;24h New
-            </span>
-          )}
-
-          {currentColumn === 'interested' && (
-            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-lime-50 dark:bg-lime-950 text-lime-700 dark:text-lime-300 border border-lime-200 dark:border-lime-800">
-              🎯 Interested
-            </span>
-          )}
-
-          {currentColumn === 'processing' && (
-            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-              🔄 In Process
-            </span>
-          )}
-
-          {currentColumn === 'cancel' && (
-            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-              ❌ Cancelled
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Card Details */}
-      <div className="p-3 bg-gray-50/90 dark:bg-gray-800/80 border-y border-gray-100 dark:border-gray-800/80 space-y-1.5 text-[11px]">
-        {lead.company_name && (
-          <div className="flex items-start gap-1.5 text-gray-700 dark:text-gray-200">
-            <span className="font-bold text-gray-400 dark:text-gray-400 w-6 shrink-0">CN:</span>
-            <span className="truncate font-medium text-gray-800 dark:text-gray-100">{lead.company_name}</span>
-          </div>
-        )}
-
-        {formattedDate && (
-          <div className="flex items-start gap-1.5 text-gray-700 dark:text-gray-200">
-            <span className="font-bold text-gray-400 dark:text-gray-400 w-6 shrink-0">CD:</span>
-            <span className="font-medium text-gray-700 dark:text-gray-200">{formattedDate}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Card Footer Actions */}
-      <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-gray-400">
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleOpenChat}
-            className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 px-2 py-1 rounded-lg transition-colors"
-            title="Open Chat Conversation"
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Open Chat</span>
-          </button>
-
-          {lead.phone_number && (
-            <>
-              <a
-                href={`https://wa.me/${lead.phone_number.replace(/\D/g, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="p-1 hover:text-emerald-600 transition-colors"
-                title="Chat on WhatsApp"
-              >
-                <Phone className="w-3 h-3 text-emerald-600" />
-              </a>
-
-              <button
-                onClick={handleTriggerAICall}
-                disabled={callingAI}
-                className={`p-1 transition-colors ${
-                  callDone
-                    ? 'text-emerald-600 font-bold'
-                    : callingAI
-                    ? 'text-violet-500 animate-spin'
-                    : 'text-violet-500 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/40 rounded'
-                }`}
-                title={callDone ? 'AI Call Initiated' : 'Trigger Voice AI Call'}
-              >
-                {callingAI ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
-              </button>
-            </>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete?.(lead.id || lead.conversation_id)
-            }}
-            className="p-1 hover:text-red-500 transition-colors"
-            title="Delete Lead"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-          {STAGE_LABELS[currentColumn]?.split(' ')[0] || 'NEW'}
-        </span>
       </div>
     </div>
   )
