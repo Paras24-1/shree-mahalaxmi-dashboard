@@ -203,30 +203,47 @@ function FollowupsContent() {
     }
   }
 
+  // Completing state for green tick button
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set())
+
   // Mark Follow-up Completed
   const handleMarkComplete = async (lead: any) => {
     const targetId = lead.id || lead.conversation_id
-    try {
-      setFollowups((prev) =>
-        prev.map((l) =>
-          l.id === targetId || l.conversation_id === targetId
-            ? { ...l, followup_notified: true, stage: 'confirm' }
-            : l
-        )
-      )
+    if (!targetId) return
 
-      await Promise.all([
-        supabase
-          .from('leads')
-          .update({ followup_notified: true, stage: 'confirm', updated_at: new Date().toISOString() })
-          .or(`id.eq.${targetId},conversation_id.eq.${targetId}`),
-        supabase
-          .from('conversations')
-          .update({ stage: 'confirm', updated_at: new Date().toISOString() })
-          .eq('id', targetId),
-      ])
+    setCompletingIds((prev) => new Set(prev).add(targetId))
+    try {
+      // 1. Update database via server API
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: lead.id,
+          conversation_id: lead.conversation_id,
+          stage: 'confirm',
+          followup_date: null,
+          followup_notes: null,
+          followup_notified: true,
+        }),
+      })
+
+      if (res.ok) {
+        // 2. Immediately remove completed lead from active follow-up list
+        setFollowups((prev) =>
+          prev.filter((l) => l.id !== targetId && l.conversation_id !== targetId)
+        )
+      } else {
+        alert('Failed to complete follow-up')
+      }
     } catch (err) {
       console.error('Failed to complete follow-up:', err)
+      alert('Error updating follow-up status')
+    } finally {
+      setCompletingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(targetId)
+        return next
+      })
     }
   }
 
@@ -243,18 +260,26 @@ function FollowupsContent() {
         followup_notified: false,
       }
 
-      setFollowups((prev) =>
-        prev.map((l) =>
-          l.id === targetId || l.conversation_id === targetId ? { ...l, ...updates } : l
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedLead.id,
+          conversation_id: selectedLead.conversation_id,
+          ...updates,
+        }),
+      })
+
+      if (res.ok) {
+        setFollowups((prev) =>
+          prev.map((l) =>
+            l.id === targetId || l.conversation_id === targetId ? { ...l, ...updates } : l
+          )
         )
-      )
-
-      await supabase
-        .from('leads')
-        .update(updates)
-        .or(`id.eq.${targetId},conversation_id.eq.${targetId}`)
-
-      setShowRescheduleModal(false)
+        setShowRescheduleModal(false)
+      } else {
+        alert('Failed to reschedule follow-up')
+      }
     } catch (err) {
       console.error('Failed to reschedule:', err)
       alert('Failed to update follow-up')
@@ -568,10 +593,19 @@ function FollowupsContent() {
                     <button
                       type="button"
                       onClick={() => handleMarkComplete(lead)}
-                      className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:border-emerald-800 transition-colors"
+                      disabled={completingIds.has(leadId)}
+                      className={`p-2 rounded-xl transition-all flex items-center justify-center ${
+                        completingIds.has(leadId)
+                          ? 'bg-emerald-600 text-white cursor-wait'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:border-emerald-800'
+                      }`}
                       title="Mark Follow-up as Completed"
                     >
-                      <Check className="w-4 h-4 stroke-[2.5]" />
+                      {completingIds.has(leadId) ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4 stroke-[2.5]" />
+                      )}
                     </button>
 
                     {/* Open Chat */}
