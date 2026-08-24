@@ -82,19 +82,34 @@ export default function StatCards() {
           )
         )
 
-        // Followups: strictly only leads where a follow-up reminder is explicitly set for today
-        const todayFollowups = allUnifiedLeads.filter((l) => {
-          if (!l.followup_date) return false
-          const fDate = new Date(l.followup_date)
-          if (isNaN(fDate.getTime())) return false
-          return (
-            fDate.getFullYear() === now.getFullYear() &&
-            fDate.getMonth() === now.getMonth() &&
-            fDate.getDate() === now.getDate()
+        // Followups: All leads scheduled for today OR in processing/followup stage today
+        const isFollowupStage = (stage: string) =>
+          ['processing', 'in_process', 'followup', 'callback_done_by_ai', 'call_done', 'not_connected'].includes(
+            (stage || '').toLowerCase().trim()
           )
+
+        const todayFollowups = allUnifiedLeads.filter((l) => {
+          // 1. Scheduled for today
+          if (l.followup_date) {
+            const fDate = new Date(l.followup_date)
+            if (
+              !isNaN(fDate.getTime()) &&
+              fDate.getFullYear() === now.getFullYear() &&
+              fDate.getMonth() === now.getMonth() &&
+              fDate.getDate() === now.getDate()
+            ) {
+              return true
+            }
+          }
+          // 2. Created or updated today and in processing/followup stage
+          if (isFollowupStage(l.stage) && (matchesDateFilter(l.created_at, 'today') || matchesDateFilter(l.updated_at, 'today'))) {
+            return true
+          }
+          return false
         })
+
         const totalFollowups = todayFollowups.length
-        const completedFollowups = todayFollowups.filter((l) => l.followup_notified).length
+        const completedFollowups = todayFollowups.filter((l) => l.followup_notified || l.stage === 'confirm').length
 
         const allTasks = tasksRes.data || []
         const todayTasks = allTasks.filter(

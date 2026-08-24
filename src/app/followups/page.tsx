@@ -131,12 +131,23 @@ function FollowupsContent() {
 
       const allLeads = Array.from(map.values())
 
-      // Filter strictly for leads that have a follow-up reminder explicitly set
-      const followupLeads = allLeads.filter((l) => Boolean(l.followup_date))
+      const isFollowupStage = (stage: string) =>
+        ['processing', 'in_process', 'followup', 'callback_done_by_ai', 'call_done', 'not_connected'].includes(
+          (stage || '').toLowerCase().trim()
+        )
 
-      // Sort by scheduled follow-up date
+      // Filter all leads that belong to follow-ups:
+      // Either has a scheduled followup_date OR is in processing/callback stage
+      const followupLeads = allLeads.filter((l) => Boolean(l.followup_date) || isFollowupStage(l.stage))
+
+      // Sort by scheduled follow-up date (if any) or creation date
       followupLeads.sort((a, b) => {
-        return new Date(a.followup_date).getTime() - new Date(b.followup_date).getTime()
+        if (a.followup_date && b.followup_date) {
+          return new Date(a.followup_date).getTime() - new Date(b.followup_date).getTime()
+        }
+        if (a.followup_date) return -1
+        if (b.followup_date) return 1
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       })
 
       setFollowups(followupLeads)
@@ -261,9 +272,16 @@ function FollowupsContent() {
     let todayList: any[] = []
     let overdueList: any[] = []
     let upcomingList: any[] = []
+    let scheduledList: any[] = []
+    let processingList: any[] = []
 
     followups.forEach((f) => {
+      const isProcessing = ['processing', 'in_process', 'followup', 'callback_done_by_ai', 'call_done', 'not_connected'].includes(
+        (f.stage || '').toLowerCase().trim()
+      )
+
       if (f.followup_date) {
+        scheduledList.push(f)
         const time = new Date(f.followup_date).getTime()
         if (time < startOfToday) {
           overdueList.push(f)
@@ -272,12 +290,20 @@ function FollowupsContent() {
         } else if (time > endOfToday) {
           upcomingList.push(f)
         }
+      } else if (isProcessing) {
+        processingList.push(f)
+        const createdTime = new Date(f.created_at || f.updated_at || 0).getTime()
+        if (createdTime >= startOfToday) {
+          todayList.push(f)
+        }
       }
     })
 
     return {
       all: followups,
       today: todayList,
+      scheduled: scheduledList,
+      processing: processingList,
       overdue: overdueList,
       upcoming: upcomingList,
     }
@@ -287,6 +313,8 @@ function FollowupsContent() {
   const filteredList = useMemo(() => {
     let baseList = categorized.all
     if (activeTab === 'today') baseList = categorized.today
+    else if (activeTab === 'scheduled') baseList = categorized.scheduled
+    else if (activeTab === 'processing') baseList = categorized.processing
     else if (activeTab === 'overdue') baseList = categorized.overdue
     else if (activeTab === 'upcoming') baseList = categorized.upcoming
 
@@ -302,10 +330,12 @@ function FollowupsContent() {
   }, [categorized, activeTab, searchQuery])
 
   const TABS = [
-    { id: 'all', label: 'All Scheduled Follow-ups', count: categorized.all.length, color: 'text-gray-700' },
     { id: 'today', label: "Today's Follow-ups", count: categorized.today.length, color: 'text-red-600' },
+    { id: 'all', label: 'All Follow-ups', count: categorized.all.length, color: 'text-gray-700' },
+    { id: 'scheduled', label: 'Scheduled Reminders', count: categorized.scheduled.length, color: 'text-purple-600' },
+    { id: 'processing', label: 'In Process Pipeline', count: categorized.processing.length, color: 'text-indigo-600' },
     { id: 'overdue', label: 'Overdue', count: categorized.overdue.length, color: 'text-amber-600' },
-    { id: 'upcoming', label: 'Upcoming', count: categorized.upcoming.length, color: 'text-purple-600' },
+    { id: 'upcoming', label: 'Upcoming', count: categorized.upcoming.length, color: 'text-blue-600' },
   ]
 
   return (
