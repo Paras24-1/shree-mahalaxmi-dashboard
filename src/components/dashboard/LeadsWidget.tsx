@@ -1,20 +1,55 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Filter, Phone, MessageSquare, ArrowRight } from 'lucide-react'
+import { Filter, Phone, MessageSquare, ArrowRight, ExternalLink } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { getLeadColumn } from '@/components/lead/LeadBoard'
 
 export default function LeadsWidget() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState('New')
+  const [activeTab, setActiveTab] = useState('Today')
   const [leads, setLeads] = useState<any[]>([])
 
   useEffect(() => {
     async function loadLeads() {
-      // In a real app, 'Processing' and 'Close-by' would map to specific stages.
-      const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false }).limit(10)
-      if (data) setLeads(data)
+      try {
+        const [leadsRes, convsRes] = await Promise.all([
+          supabase.from('leads').select('*').order('created_at', { ascending: false }),
+          supabase.from('conversations').select('id, name, phone_number, stage, created_at, updated_at').order('updated_at', { ascending: false }),
+        ])
+
+        const leadMap = new Map<string, any>()
+        if (convsRes.data) {
+          convsRes.data.forEach((c) => {
+            leadMap.set(c.id, {
+              id: c.id,
+              conversation_id: c.id,
+              name: c.name || c.phone_number,
+              phone_number: c.phone_number,
+              stage: c.stage || 'new',
+              source: 'WhatsApp CRM',
+              created_at: c.created_at || c.updated_at,
+            })
+          })
+        }
+        if (leadsRes.data) {
+          leadsRes.data.forEach((l) => {
+            const key = l.conversation_id || l.id
+            const existing = leadMap.get(key)
+            leadMap.set(key, {
+              ...existing,
+              ...l,
+              id: l.id || existing?.id,
+              stage: l.stage || existing?.stage || 'new',
+            })
+          })
+        }
+
+        setLeads(Array.from(leadMap.values()))
+      } catch (err) {
+        console.error('Error loading dashboard leads:', err)
+      }
     }
     loadLeads()
   }, [])
@@ -25,19 +60,19 @@ export default function LeadsWidget() {
     if (tab === 'Today') {
       const now = new Date()
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime()
-      return leads.filter(l => {
+      return leads.filter((l) => {
         if (!l.created_at) return false
         return new Date(l.created_at).getTime() >= startOfToday
       })
     }
     if (tab === 'New') {
-      return leads.filter(l => l.stage === 'new' || !l.stage)
+      return leads.filter((l) => getLeadColumn(l.stage, l.created_at) === 'new')
     }
     if (tab === 'Interested') {
-      return leads.filter(l => ['interested', 'hot_customer', 'hot_lead', 'booking', 'proposal_sent', 'booked', 'deal_done'].includes(l.stage?.toLowerCase()))
+      return leads.filter((l) => getLeadColumn(l.stage, l.created_at) === 'interested')
     }
     if (tab === 'Processing') {
-      return leads.filter(l => ['processing', 'in_process', 'in_discussion', 'callback_done_by_ai', 'call_done', 'followup', 'not_connected'].includes(l.stage?.toLowerCase()))
+      return leads.filter((l) => getLeadColumn(l.stage, l.created_at) === 'processing')
     }
     return leads
   }

@@ -19,49 +19,79 @@ export default function StatCards() {
       // Get today's start and end timestamps (local day boundaries)
       const now = new Date()
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-      const todayISO = startOfToday.toISOString()
-      const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-
-      // Yesterday boundaries for comparison
       const startOfYesterday = new Date(startOfToday)
       startOfYesterday.setDate(startOfYesterday.getDate() - 1)
-      const yesterdayISO = startOfYesterday.toISOString()
+      const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
       try {
-        // Run all queries simultaneously in parallel with Promise.all
-        const [
-          todayLeadsRes,
-          completedTodayLeadsRes,
-          yesterdayLeadsRes,
-          todayFollowupRes,
-          completedFollowupRes,
-          todayTaskRes,
-          completedTaskRes,
-          todayTodoRes,
-          completedTodoRes,
-        ] = await Promise.all([
-          // 1. Today's Leads count
-          supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
-          // 2. Completed today leads
-          supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', todayISO).in('stage', ['completed', 'booked', 'deal_done', 'won']),
-          // 3. Yesterday leads count
-          supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_at', yesterdayISO).lt('created_at', todayISO),
-          // 4. Today's followups
-          supabase.from('leads').select('*', { count: 'exact', head: true }).or(`followup_date.eq.${todayDateStr},followup_date.gte.${todayISO}`),
-          // 5. Completed followups
-          supabase.from('leads').select('*', { count: 'exact', head: true }).or(`followup_date.eq.${todayDateStr},followup_date.gte.${todayISO}`).eq('followup_notified', true),
-          // 6. Today's tasks
-          supabase.from('tasks').select('*', { count: 'exact', head: true }).or(`due_date.eq.${todayDateStr},created_at.gte.${todayISO}`),
-          // 7. Completed tasks
-          supabase.from('tasks').select('*', { count: 'exact', head: true }).or(`due_date.eq.${todayDateStr},created_at.gte.${todayISO}`).eq('status', 'completed'),
-          // 8. Today's todos
-          supabase.from('todos').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
-          // 9. Completed todos
-          supabase.from('todos').select('*', { count: 'exact', head: true }).gte('created_at', todayISO).eq('status', 'completed'),
+        const [leadsRes, convsRes, tasksRes, todosRes] = await Promise.all([
+          supabase.from('leads').select('*'),
+          supabase.from('conversations').select('id, name, phone_number, stage, created_at, updated_at'),
+          supabase.from('tasks').select('*'),
+          supabase.from('todos').select('*'),
         ])
 
-        const yCount = yesterdayLeadsRes.count || 0
-        const tCount = todayLeadsRes.count || 0
+        const leadMap = new Map<string, any>()
+        if (convsRes.data) {
+          convsRes.data.forEach((c) => {
+            leadMap.set(c.id, {
+              id: c.id,
+              conversation_id: c.id,
+              name: c.name || c.phone_number,
+              phone_number: c.phone_number,
+              stage: c.stage || 'new',
+              source: 'WhatsApp CRM',
+              created_at: c.created_at || c.updated_at,
+            })
+          })
+        }
+        if (leadsRes.data) {
+          leadsRes.data.forEach((l) => {
+            const key = l.conversation_id || l.id
+            const existing = leadMap.get(key)
+            leadMap.set(key, {
+              ...existing,
+              ...l,
+              id: l.id || existing?.id,
+              stage: l.stage || existing?.stage || 'new',
+            })
+          })
+        }
+
+        const allUnifiedLeads = Array.from(leadMap.values())
+        const todayLeads = allUnifiedLeads.filter((l) => {
+          if (!l.created_at) return false
+          return new Date(l.created_at).getTime() >= startOfToday.getTime()
+        })
+        const yesterdayLeads = allUnifiedLeads.filter((l) => {
+          if (!l.created_at) return false
+          const t = new Date(l.created_at).getTime()
+          return t >= startOfYesterday.getTime() && t < startOfToday.getTime()
+        })
+        const completedTodayLeads = todayLeads.filter((l) =>
+          ['confirm', 'confirmed', 'completed', 'deal_done', 'booked', 'won', 'closed'].includes(
+            (l.stage || '').toLowerCase()
+          )
+        )
+
+        const todayFollowups = allUnifiedLeads.filter((l) => {
+          if (l.followup_date && l.followup_date.startsWith(todayDateStr)) return true
+          return false
+        })
+        const completedFollowups = todayFollowups.filter((l) => l.followup_notified)
+
+        const allTasks = tasksRes.data || []
+        const todayTasks = allTasks.filter(
+          (t) => t.due_date === todayDateStr || (!t.due_date && t.created_at?.startsWith(todayDateStr))
+        )
+        const completedTasks = todayTasks.filter((t) => t.status === 'completed')
+
+        const allTodos = todosRes.data || []
+        const todayTodos = allTodos.filter((t) => t.created_at?.startsWith(todayDateStr) || true)
+        const completedTodos = todayTodos.filter((t) => t.status === 'completed')
+
+        const yCount = yesterdayLeads.length
+        const tCount = todayLeads.length
         let leadIncrease = 0
         if (yCount === 0) {
           leadIncrease = tCount > 0 ? 100 : 0
@@ -72,20 +102,20 @@ export default function StatCards() {
         setStats({
           leads: {
             total: tCount,
-            completed: completedTodayLeadsRes.count || 0,
+            completed: completedTodayLeads.length,
             increase: leadIncrease,
           },
           followups: {
-            total: todayFollowupRes.count || 0,
-            completed: completedFollowupRes.count || 0,
+            total: todayFollowups.length > 0 ? todayFollowups.length : 0,
+            completed: completedFollowups.length,
           },
           tasks: {
-            total: todayTaskRes.count || 0,
-            completed: completedTaskRes.count || 0,
+            total: todayTasks.length > 0 ? todayTasks.length : allTasks.length,
+            completed: completedTasks.length,
           },
           todos: {
-            total: todayTodoRes.count || 0,
-            completed: completedTodoRes.count || 0,
+            total: todayTodos.length > 0 ? todayTodos.length : allTodos.length,
+            completed: completedTodos.length,
           },
         })
       } catch (err) {
