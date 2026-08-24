@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import LeadColumn from './LeadColumn'
 import LeadCard from './LeadCard'
-import { Plus, Search, Filter, RefreshCw, X, Check, FileText } from 'lucide-react'
+import { Plus, Search, Filter, RefreshCw, X, Check, FileText, Calendar, Sparkles } from 'lucide-react'
 
 const COLUMNS = [
   { id: 'new', title: 'New Leads', subtitle: 'Last 24 Hours', headerBg: 'bg-teal-700', colorClass: 'border-t-teal-700' },
@@ -68,11 +69,53 @@ export function getLeadColumn(stage: string | undefined | null, createdAt?: stri
   return 'new'
 }
 
+type DateFilterType = 'all' | 'today' | 'yesterday' | 'this_week'
+
+function matchesDateFilter(createdAt: string | undefined, filter: DateFilterType): boolean {
+  if (filter === 'all') return true
+  if (!createdAt) return false
+  const leadTime = new Date(createdAt).getTime()
+  if (isNaN(leadTime)) return false
+
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime()
+  const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000
+  const startOfWeek = startOfToday - 7 * 24 * 60 * 60 * 1000
+
+  if (filter === 'today') {
+    return leadTime >= startOfToday
+  }
+  if (filter === 'yesterday') {
+    return leadTime >= startOfYesterday && leadTime < startOfToday
+  }
+  if (filter === 'this_week') {
+    return leadTime >= startOfWeek
+  }
+  return true
+}
+
 export default function LeadBoard() {
+  const searchParams = useSearchParams()
+  const paramFilter = searchParams?.get('filter')
+
   const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [dateFilter, setDateFilter] = useState<DateFilterType>(
+    paramFilter === 'today' ? 'today' : paramFilter === 'yesterday' ? 'yesterday' : 'all'
+  )
   const [showAddModal, setShowAddModal] = useState(false)
+
+  // Update date filter if query params change
+  useEffect(() => {
+    if (paramFilter === 'today') {
+      setDateFilter('today')
+    } else if (paramFilter === 'yesterday') {
+      setDateFilter('yesterday')
+    } else if (paramFilter === 'all') {
+      setDateFilter('all')
+    }
+  }, [paramFilter])
 
   // New Lead form
   const [newName, setNewName] = useState('')
@@ -202,16 +245,22 @@ export default function LeadBoard() {
     }
   }
 
+  const todayCount = useMemo(() => leads.filter((l) => matchesDateFilter(l.created_at, 'today')).length, [leads])
+  const yesterdayCount = useMemo(() => leads.filter((l) => matchesDateFilter(l.created_at, 'yesterday')).length, [leads])
+  const thisWeekCount = useMemo(() => leads.filter((l) => matchesDateFilter(l.created_at, 'this_week')).length, [leads])
+
   const filteredLeads = useMemo(() => {
-    if (!searchQuery.trim()) return leads
-    const q = searchQuery.toLowerCase()
-    return leads.filter(
-      (l) =>
+    return leads.filter((l) => {
+      if (!matchesDateFilter(l.created_at, dateFilter)) return false
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      return (
         (l.name && l.name.toLowerCase().includes(q)) ||
         (l.phone_number && l.phone_number.includes(q)) ||
         (l.company_name && l.company_name.toLowerCase().includes(q))
-    )
-  }, [leads, searchQuery])
+      )
+    })
+  }, [leads, searchQuery, dateFilter])
 
   if (loading && leads.length === 0) {
     return (
@@ -224,21 +273,68 @@ export default function LeadBoard() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Top Action Sub-bar */}
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search leads by name, phone..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 pr-7 py-1.5 text-xs border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48 sm:w-64"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
-              <X className="w-3 h-3" />
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search leads by name, phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 pr-7 py-1.5 text-xs border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48 sm:w-64"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Date Filter Tabs */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 p-1 rounded-xl text-xs">
+            <button
+              onClick={() => setDateFilter('all')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                dateFilter === 'all'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              All ({leads.length})
             </button>
-          )}
+            <button
+              onClick={() => setDateFilter('today')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                dateFilter === 'today'
+                  ? 'bg-green-600 text-white shadow-xs'
+                  : 'text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${dateFilter === 'today' ? 'bg-white animate-pulse' : 'bg-green-500'}`} />
+              <span>Today's Leads ({todayCount})</span>
+            </button>
+            <button
+              onClick={() => setDateFilter('yesterday')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                dateFilter === 'yesterday'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              Yesterday ({yesterdayCount})
+            </button>
+            <button
+              onClick={() => setDateFilter('this_week')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                dateFilter === 'this_week'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              7 Days ({thisWeekCount})
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -258,6 +354,41 @@ export default function LeadBoard() {
           </button>
         </div>
       </div>
+
+      {/* Active Filter Notice Banner */}
+      {dateFilter === 'today' && (
+        <div className="flex items-center justify-between px-3.5 py-2 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl mb-3 text-xs text-green-800 dark:text-green-300">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="font-bold">Filtered by Today's Leads:</span>
+            <span>{filteredLeads.length} lead{filteredLeads.length === 1 ? '' : 's'} registered today</span>
+          </div>
+          <button
+            onClick={() => setDateFilter('all')}
+            className="text-xs font-bold underline hover:text-green-950 dark:hover:text-white flex items-center gap-1"
+          >
+            <span>Show All Leads ({leads.length})</span>
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {dateFilter !== 'all' && dateFilter !== 'today' && (
+        <div className="flex items-center justify-between px-3.5 py-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl mb-3 text-xs text-blue-800 dark:text-blue-300">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5 text-blue-600" />
+            <span className="font-bold">Filtered by {dateFilter === 'yesterday' ? 'Yesterday' : 'Last 7 Days'}:</span>
+            <span>{filteredLeads.length} lead{filteredLeads.length === 1 ? '' : 's'}</span>
+          </div>
+          <button
+            onClick={() => setDateFilter('all')}
+            className="text-xs font-bold underline hover:text-blue-950 dark:hover:text-white flex items-center gap-1"
+          >
+            <span>Clear Filter</span>
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* Top Filter Chips */}
       <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 text-xs">

@@ -19,9 +19,17 @@ export default function LeadsWidget() {
     loadLeads()
   }, [])
 
-  const tabs = ['New', 'Interested', 'Processing']
+  const tabs = ['Today', 'New', 'Interested', 'Processing']
 
   const getFilteredLeads = (tab: string) => {
+    if (tab === 'Today') {
+      const now = new Date()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime()
+      return leads.filter(l => {
+        if (!l.created_at) return false
+        return new Date(l.created_at).getTime() >= startOfToday
+      })
+    }
     if (tab === 'New') {
       return leads.filter(l => l.stage === 'new' || !l.stage)
     }
@@ -44,11 +52,20 @@ export default function LeadsWidget() {
 
   return (
     <div className="bg-white dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col min-h-[400px]">
-      <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
-        <Filter className="w-5 h-5 text-blue-800" />
-        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">Leads</h3>
+      <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Filter className="w-5 h-5 text-blue-800" />
+          <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">Leads</h3>
+          <button
+            onClick={() => router.push('/lead')}
+            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 hover:underline flex items-center gap-1 ml-2"
+          >
+            <span>View Board</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
         
-        <div className="ml-auto flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
           {tabs.map(tab => {
             const count = getFilteredLeads(tab).length
             return (

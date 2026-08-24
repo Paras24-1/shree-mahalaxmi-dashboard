@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Filter, Send, Calendar, ListTodo } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Filter, Send, Calendar, ListTodo, ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export default function StatCards() {
+  const router = useRouter()
   const [stats, setStats] = useState({
     leads: { total: 0, completed: 0, increase: 0 },
     followups: { total: 0, completed: 0 },
@@ -97,98 +99,178 @@ export default function StatCards() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {/* Leads Card */}
-      <div className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
-              <Filter className="w-5 h-5 text-green-500" />
+      <div
+        onClick={() => router.push('/lead?filter=today')}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push('/lead?filter=today') }}
+        className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md hover:border-green-300 dark:hover:border-green-700/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between"
+      >
+        <div>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-50 dark:bg-green-950/40 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Filter className="w-5 h-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <span>Today's Leads</span>
+                  <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-green-500 transition-opacity -ml-0.5" />
+                </p>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.leads.total}</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Today's Leads</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.leads.total}</h3>
-            </div>
+            <Filter className="w-8 h-8 text-green-100 dark:text-green-950 opacity-50 group-hover:opacity-80 transition-opacity" />
           </div>
-          <Filter className="w-8 h-8 text-green-100 opacity-50" />
+          <p className="text-xs text-green-500 font-medium mt-2">{stats.leads.increase}% Increase <span className="text-gray-400">vs Yesterday</span></p>
         </div>
-        <p className="text-xs text-green-500 font-medium mt-2">{stats.leads.increase}% Increase <span className="text-gray-400">vs Yesterday</span></p>
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Completed Lead</span>
-          <span className="text-sm font-bold text-green-500">{stats.leads.total > 0 ? ((stats.leads.completed / stats.leads.total) * 100).toFixed(2) : 0}%</span>
-        </div>
-        <div className="w-full bg-gray-100 h-1.5 mt-2 rounded-full overflow-hidden">
-          <div className="bg-green-500 h-full" style={{ width: `${stats.leads.total > 0 ? (stats.leads.completed / stats.leads.total) * 100 : 0}%` }}></div>
+
+        <div>
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Completed Lead</span>
+            <span className="text-xs font-bold text-green-500">{stats.leads.total > 0 ? ((stats.leads.completed / stats.leads.total) * 100).toFixed(2) : 0}%</span>
+          </div>
+          <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 mt-2 rounded-full overflow-hidden">
+            <div className="bg-green-500 h-full transition-all" style={{ width: `${stats.leads.total > 0 ? (stats.leads.completed / stats.leads.total) * 100 : 0}%` }}></div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-between text-[11px] text-green-600 dark:text-green-400 font-semibold opacity-80 group-hover:opacity-100">
+            <span>Tap to view leads</span>
+            <span className="flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+              View &rarr;
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Followups Card */}
-      <div className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
-              <Send className="w-5 h-5 text-red-500" />
+      <div
+        onClick={() => router.push('/reminder?filter=today')}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push('/reminder?filter=today') }}
+        className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md hover:border-red-300 dark:hover:border-red-700/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between"
+      >
+        <div>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-950/40 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Send className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <span>Today's Followups</span>
+                  <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-red-500 transition-opacity -ml-0.5" />
+                </p>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.followups.total}</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Today's Followups</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.followups.total}</h3>
-            </div>
+            <Send className="w-8 h-8 text-red-100 dark:text-red-950 opacity-50 group-hover:opacity-80 transition-opacity" />
           </div>
-          <Send className="w-8 h-8 text-red-100 opacity-50" />
+          <p className="text-xs text-red-500 font-medium mt-2">{stats.followups.completed} Completed <span className="text-gray-400">{stats.followups.total}</span></p>
         </div>
-        <p className="text-xs text-red-500 font-medium mt-2">{stats.followups.completed} Completed <span className="text-gray-400">{stats.followups.total}</span></p>
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Completed Followup</span>
-          <span className="text-sm font-bold text-red-500">{stats.followups.total > 0 ? ((stats.followups.completed / stats.followups.total) * 100).toFixed(2) : 100.00}%</span>
-        </div>
-        <div className="w-full bg-gray-100 h-1.5 mt-2 rounded-full overflow-hidden">
-          <div className="bg-red-500 h-full" style={{ width: `${stats.followups.total > 0 ? (stats.followups.completed / stats.followups.total) * 100 : 100}%` }}></div>
+
+        <div>
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Completed Followup</span>
+            <span className="text-xs font-bold text-red-500">{stats.followups.total > 0 ? ((stats.followups.completed / stats.followups.total) * 100).toFixed(2) : 100.00}%</span>
+          </div>
+          <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 mt-2 rounded-full overflow-hidden">
+            <div className="bg-red-500 h-full transition-all" style={{ width: `${stats.followups.total > 0 ? (stats.followups.completed / stats.followups.total) * 100 : 100}%` }}></div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-between text-[11px] text-red-600 dark:text-red-400 font-semibold opacity-80 group-hover:opacity-100">
+            <span>Tap to view followups</span>
+            <span className="flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+              View &rarr;
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Tasks Card */}
-      <div className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-orange-500" />
+      <div
+        onClick={() => router.push('/task')}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push('/task') }}
+        className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md hover:border-orange-300 dark:hover:border-orange-700/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between"
+      >
+        <div>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-950/40 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Calendar className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <span>Today's Tasks</span>
+                  <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-orange-500 transition-opacity -ml-0.5" />
+                </p>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.tasks.total}</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Today's Tasks</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.tasks.total}</h3>
-            </div>
+            <Calendar className="w-8 h-8 text-orange-100 dark:text-orange-950 opacity-50 group-hover:opacity-80 transition-opacity" />
           </div>
-          <Calendar className="w-8 h-8 text-orange-100 opacity-50" />
+          <p className="text-xs text-orange-500 font-medium mt-2">{stats.tasks.completed} Completed <span className="text-gray-400">{stats.tasks.total}</span></p>
         </div>
-        <p className="text-xs text-orange-500 font-medium mt-2">{stats.tasks.completed} Completed <span className="text-gray-400">{stats.tasks.total}</span></p>
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Completed Task</span>
-          <span className="text-sm font-bold text-orange-500">{stats.tasks.total > 0 ? ((stats.tasks.completed / stats.tasks.total) * 100).toFixed(2) : 100.00}%</span>
-        </div>
-        <div className="w-full bg-gray-100 h-1.5 mt-2 rounded-full overflow-hidden">
-          <div className="bg-orange-500 h-full" style={{ width: `${stats.tasks.total > 0 ? (stats.tasks.completed / stats.tasks.total) * 100 : 100}%` }}></div>
+
+        <div>
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Completed Task</span>
+            <span className="text-xs font-bold text-orange-500">{stats.tasks.total > 0 ? ((stats.tasks.completed / stats.tasks.total) * 100).toFixed(2) : 100.00}%</span>
+          </div>
+          <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 mt-2 rounded-full overflow-hidden">
+            <div className="bg-orange-500 h-full transition-all" style={{ width: `${stats.tasks.total > 0 ? (stats.tasks.completed / stats.tasks.total) * 100 : 100}%` }}></div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-between text-[11px] text-orange-600 dark:text-orange-400 font-semibold opacity-80 group-hover:opacity-100">
+            <span>Tap to view tasks</span>
+            <span className="flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+              View &rarr;
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Todos Card */}
-      <div className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-cyan-50 flex items-center justify-center">
-              <ListTodo className="w-5 h-5 text-cyan-500" />
+      <div
+        onClick={() => router.push('/todo')}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push('/todo') }}
+        className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md hover:border-cyan-300 dark:hover:border-cyan-700/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between"
+      >
+        <div>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-cyan-50 dark:bg-cyan-950/40 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <ListTodo className="w-5 h-5 text-cyan-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <span>Today's Todos</span>
+                  <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-cyan-500 transition-opacity -ml-0.5" />
+                </p>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.todos.total}</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Today's Todos</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stats.todos.total}</h3>
-            </div>
+            <ListTodo className="w-8 h-8 text-cyan-100 dark:text-cyan-950 opacity-50 group-hover:opacity-80 transition-opacity" />
           </div>
-          <ListTodo className="w-8 h-8 text-cyan-100 opacity-50" />
+          <p className="text-xs text-cyan-500 font-medium mt-2">{stats.todos.completed} Completed <span className="text-gray-400">{stats.todos.total}</span></p>
         </div>
-        <p className="text-xs text-cyan-500 font-medium mt-2">{stats.todos.completed} Completed <span className="text-gray-400">{stats.todos.total}</span></p>
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Completed Todo</span>
-          <span className="text-sm font-bold text-cyan-500">{stats.todos.total > 0 ? ((stats.todos.completed / stats.todos.total) * 100).toFixed(2) : 100.00}%</span>
-        </div>
-        <div className="w-full bg-gray-100 h-1.5 mt-2 rounded-full overflow-hidden">
-          <div className="bg-cyan-500 h-full" style={{ width: `${stats.todos.total > 0 ? (stats.todos.completed / stats.todos.total) * 100 : 100}%` }}></div>
+
+        <div>
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Completed Todo</span>
+            <span className="text-xs font-bold text-cyan-500">{stats.todos.total > 0 ? ((stats.todos.completed / stats.todos.total) * 100).toFixed(2) : 100.00}%</span>
+          </div>
+          <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 mt-2 rounded-full overflow-hidden">
+            <div className="bg-cyan-500 h-full transition-all" style={{ width: `${stats.todos.total > 0 ? (stats.todos.completed / stats.todos.total) * 100 : 100}%` }}></div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-between text-[11px] text-cyan-600 dark:text-cyan-400 font-semibold opacity-80 group-hover:opacity-100">
+            <span>Tap to view todos</span>
+            <span className="flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+              View &rarr;
+            </span>
+          </div>
         </div>
       </div>
     </div>

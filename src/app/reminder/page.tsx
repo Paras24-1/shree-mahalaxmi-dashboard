@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import {
   Plus,
@@ -83,10 +84,32 @@ function getPresets() {
 }
 
 export default function ReminderPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <div className="flex flex-col items-center justify-center py-24">
+            <RefreshCw className="w-8 h-8 text-red-400 animate-spin mb-3" />
+            <p className="text-sm text-gray-500">Loading reminders...</p>
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <ReminderContent />
+    </Suspense>
+  )
+}
+
+function ReminderContent() {
+  const searchParams = useSearchParams()
+  const urlFilter = searchParams?.get('filter')
+
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterType, setFilterType] = useState<'all' | 'overdue' | 'today' | 'upcoming'>('all')
+  const [filterType, setFilterType] = useState<'all' | 'overdue' | 'today' | 'upcoming'>(
+    urlFilter === 'today' ? 'today' : urlFilter === 'overdue' ? 'overdue' : urlFilter === 'upcoming' ? 'upcoming' : 'all'
+  )
   const [showModal, setShowModal] = useState(false)
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
   const [modalTitle, setModalTitle] = useState('')
@@ -96,6 +119,13 @@ export default function ReminderPage() {
   const [customTimeVal, setCustomTimeVal] = useState('')
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (urlFilter === 'today') setFilterType('today')
+    else if (urlFilter === 'overdue') setFilterType('overdue')
+    else if (urlFilter === 'upcoming') setFilterType('upcoming')
+    else if (urlFilter === 'all') setFilterType('all')
+  }, [urlFilter])
 
   const fetchReminders = useCallback(async () => {
     setLoading(true)
