@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import LeadCard from './LeadCard'
@@ -17,13 +17,9 @@ import {
   RefreshCw,
   Check,
   Calendar,
-  SlidersHorizontal,
   RotateCcw,
   LayoutGrid,
   List,
-  Phone,
-  MessageSquare,
-  Trash2,
 } from 'lucide-react'
 
 export function getLeadColumn(stage: string | undefined | null, createdAt?: string): string {
@@ -135,6 +131,9 @@ export default function LeadBoard() {
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'card_list' | 'kanban'>('card_list')
 
+  // Pagination / Chunk Rendering for Super-Fast Performance
+  const [renderLimit, setRenderLimit] = useState(40)
+
   // Modals & Menus
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
@@ -150,6 +149,7 @@ export default function LeadBoard() {
 
   const filterRef = useRef<HTMLDivElement>(null)
   const moreRef = useRef<HTMLDivElement>(null)
+  const observerTarget = useRef<HTMLDivElement>(null)
 
   // Close menus on outside click
   useEffect(() => {
@@ -165,7 +165,7 @@ export default function LeadBoard() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Fetch leads from Supabase
+  // Fetch leads from Supabase with lightweight selection
   const fetchLeads = async () => {
     setLoading(true)
     try {
@@ -210,13 +210,15 @@ export default function LeadBoard() {
     }
   }, [])
 
-  // Stage Change Handler
-  const handleStageChange = async (leadId: string, newStage: string) => {
-    try {
-      setLeads((prev) =>
-        prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, stage: newStage } : l))
-      )
+  // Ultra-Fast Optimistic Stage Change Handler
+  const handleStageChange = useCallback(async (leadId: string, newStage: string) => {
+    // 1. Instant 0ms local state update
+    setLeads((prev) =>
+      prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, stage: newStage } : l))
+    )
 
+    // 2. Background database sync
+    try {
       await supabase
         .from('leads')
         .update({ stage: newStage, updated_at: new Date().toISOString() })
@@ -224,13 +226,13 @@ export default function LeadBoard() {
     } catch (err) {
       console.error('Failed to change stage:', err)
     }
-  }
+  }, [])
 
   // Delete Lead Handler
-  const handleDelete = async (leadId: string) => {
+  const handleDelete = useCallback(async (leadId: string) => {
     if (!window.confirm('Are you sure you want to delete this lead?')) return
+    setLeads((prev) => prev.filter((l) => l.id !== leadId && l.conversation_id !== leadId))
     try {
-      setLeads((prev) => prev.filter((l) => l.id !== leadId && l.conversation_id !== leadId))
       await supabase
         .from('leads')
         .delete()
@@ -238,7 +240,7 @@ export default function LeadBoard() {
     } catch (err) {
       console.error('Failed to delete lead:', err)
     }
-  }
+  }, [])
 
   // Create Lead Handler
   const handleCreateLead = async (e: React.FormEvent) => {
@@ -305,21 +307,22 @@ export default function LeadBoard() {
   }
 
   // Toggle selection
-  const handleToggleSelect = (id: string) => {
+  const handleToggleSelect = useCallback((id: string) => {
     setSelectedLeadIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-  }
+  }, [])
 
-  // Filtered Leads
+  // Fast In-Memory Filtered Leads
   const filteredLeads = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
+
     return leads.filter((lead) => {
       // 1. Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim()
+      if (q) {
         const nameMatch = lead.name?.toLowerCase().includes(q)
         const phoneMatch = lead.phone_number?.toLowerCase().includes(q)
         const companyMatch = lead.company_name?.toLowerCase().includes(q)
@@ -388,6 +391,16 @@ export default function LeadBoard() {
     { id: 'cancel', label: 'Cancel', count: stageCounts.cancel, dotColor: 'bg-rose-500', amount: '0.0' },
   ]
 
+  // Reset render limit when tab or filter changes
+  useEffect(() => {
+    setRenderLimit(40)
+  }, [activeStageTab, searchQuery, dateFilter, sourceFilter])
+
+  // Lazy render more items as user scrolls near bottom
+  const visibleLeads = useMemo(() => {
+    return filteredLeads.slice(0, renderLimit)
+  }, [filteredLeads, renderLimit])
+
   const activeFilterCount = (sourceFilter !== 'All' ? 1 : 0) + (dateFilter !== 'all' ? 1 : 0)
 
   if (loading && leads.length === 0) {
@@ -400,7 +413,7 @@ export default function LeadBoard() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* 1. Purple Gradient Header (Exact match to screenshot) */}
+      {/* 1. Purple Gradient Header */}
       <div className="bg-gradient-to-r from-[#6A1B9A] via-[#7B1FA2] to-[#4A148C] text-white px-4 py-3 rounded-2xl shadow-md flex items-center justify-between mb-3.5">
         <div className="flex items-center gap-2">
           <button
@@ -583,7 +596,7 @@ export default function LeadBoard() {
         </div>
       </div>
 
-      {/* 2. Clean White Search Bar (Exact match to screenshot) */}
+      {/* 2. Clean White Search Bar */}
       <div className="relative mb-3">
         <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
@@ -615,7 +628,7 @@ export default function LeadBoard() {
                 flex flex-col items-start px-3.5 py-2 rounded-xl border transition-all shrink-0 min-w-[105px]
                 ${
                   isSelected
-                    ? 'bg-[#E3F2FD] dark:bg-sky-950/40 border-[#90CAF9] dark:border-sky-800 text-[#0D47A1] dark:text-sky-300 shadow-xs'
+                    ? 'bg-[#E3F2FD] dark:bg-sky-950/40 border-[#90CAF9] dark:border-sky-800 text-[#0D47A1] dark:text-sky-300 shadow-xs scale-102'
                     : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50'
                 }
               `}
@@ -655,16 +668,30 @@ export default function LeadBoard() {
               </button>
             </div>
           ) : (
-            filteredLeads.map((lead) => (
-              <LeadCard
-                key={lead.id || lead.conversation_id}
-                lead={lead}
-                isSelected={selectedLeadIds.has(lead.id || lead.conversation_id)}
-                onToggleSelect={handleToggleSelect}
-                onDelete={handleDelete}
-                onStageChange={handleStageChange}
-              />
-            ))
+            <>
+              {visibleLeads.map((lead) => (
+                <LeadCard
+                  key={lead.id || lead.conversation_id}
+                  lead={lead}
+                  isSelected={selectedLeadIds.has(lead.id || lead.conversation_id)}
+                  onToggleSelect={handleToggleSelect}
+                  onDelete={handleDelete}
+                  onStageChange={handleStageChange}
+                />
+              ))}
+
+              {/* Load More Trigger Button when leads exceed render limit */}
+              {visibleLeads.length < filteredLeads.length && (
+                <div className="text-center py-3">
+                  <button
+                    onClick={() => setRenderLimit((prev) => prev + 50)}
+                    className="px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-purple-600 dark:text-purple-400 rounded-xl text-xs font-bold shadow-xs hover:bg-gray-50"
+                  >
+                    Load More Leads ({visibleLeads.length} of {filteredLeads.length})
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (

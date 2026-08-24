@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Phone,
@@ -13,10 +13,6 @@ import {
   Bot,
   ChevronDown,
   Check,
-  Building2,
-  Calendar,
-  User,
-  ExternalLink,
 } from 'lucide-react'
 import { getLeadColumn } from './LeadBoard'
 
@@ -28,23 +24,56 @@ interface LeadCardProps {
   onStageChange?: (id: string, newStage: string) => void
 }
 
-const STAGE_BADGES: Record<string, { label: string; bg: string; text: string }> = {
-  new: { label: 'New', bg: 'bg-[#005f73]', text: 'text-white' },
-  interested: { label: 'Interested', bg: 'bg-[#2b9348]', text: 'text-white' },
-  processing: { label: 'Processing', bg: 'bg-[#1d3557]', text: 'text-white' },
-  confirm: { label: 'Confirm', bg: 'bg-[#007f5f]', text: 'text-white' },
-  cancel: { label: 'Cancel', bg: 'bg-[#d90429]', text: 'text-white' },
+const STAGE_CONFIG: Record<
+  string,
+  { label: string; bg: string; activeBg: string; border: string; text: string }
+> = {
+  new: {
+    label: 'New',
+    bg: 'bg-[#005f73]',
+    activeBg: 'bg-[#005f73]',
+    border: 'border-[#005f73]',
+    text: 'text-white',
+  },
+  processing: {
+    label: 'Processing',
+    bg: 'bg-[#1d3557]',
+    activeBg: 'bg-[#1d3557]',
+    border: 'border-[#1d3557]',
+    text: 'text-white',
+  },
+  interested: {
+    label: 'Interested',
+    bg: 'bg-[#2b9348]',
+    activeBg: 'bg-[#2b9348]',
+    border: 'border-[#2b9348]',
+    text: 'text-white',
+  },
+  confirm: {
+    label: 'Confirm',
+    bg: 'bg-[#007f5f]',
+    activeBg: 'bg-[#007f5f]',
+    border: 'border-[#007f5f]',
+    text: 'text-white',
+  },
+  cancel: {
+    label: 'Cancel',
+    bg: 'bg-[#d90429]',
+    activeBg: 'bg-[#d90429]',
+    border: 'border-[#d90429]',
+    text: 'text-white',
+  },
 }
 
 const STAGE_OPTIONS = [
-  { id: 'new', label: 'New Leads' },
-  { id: 'interested', label: 'Interested' },
-  { id: 'processing', label: 'In Process' },
-  { id: 'confirm', label: 'Confirm' },
-  { id: 'cancel', label: 'Cancel' },
+  { id: 'new', label: 'New', activeBg: 'bg-[#005f73]' },
+  { id: 'processing', label: 'Processing', activeBg: 'bg-[#1d3557]' },
+  { id: 'interested', label: 'Interested', activeBg: 'bg-[#2b9348]' },
+  { id: 'confirm', label: 'Confirm', activeBg: 'bg-[#007f5f]' },
+  { id: 'cancel', label: 'Cancel', activeBg: 'bg-[#d90429]' },
 ]
 
-export default function LeadCard({
+function LeadCardComponent({
   lead,
   isSelected = false,
   onToggleSelect,
@@ -58,7 +87,7 @@ export default function LeadCard({
   const [callSuccess, setCallSuccess] = useState(false)
 
   const currentColumn = getLeadColumn(lead.stage, lead.created_at)
-  const stageBadge = STAGE_BADGES[currentColumn] || { label: 'New', bg: 'bg-[#005f73]', text: 'text-white' }
+  const stageBadge = STAGE_CONFIG[currentColumn] || STAGE_CONFIG['new']
 
   const formattedDate = lead.created_at
     ? new Date(lead.created_at)
@@ -126,22 +155,50 @@ export default function LeadCard({
         e.dataTransfer.setData('leadId', lead.id || lead.conversation_id)
       }}
     >
-      {/* Top Right Stage Badge */}
-      <div className="absolute top-0 right-0 z-10">
-        <span
+      {/* Interactive Top-Right Stage Tag Dropdown */}
+      <div className="absolute top-0 right-0 z-10" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => setShowStageMenu((v) => !v)}
           className={`
-            inline-block text-[11px] font-bold px-3 py-0.5 rounded-bl-xl rounded-tr-2xl tracking-wide uppercase shadow-2xs
+            inline-flex items-center gap-1 text-[11px] font-bold px-3 py-0.5 rounded-bl-xl rounded-tr-2xl tracking-wide uppercase shadow-2xs hover:brightness-110 transition-all cursor-pointer
             ${stageBadge.bg} ${stageBadge.text}
           `}
+          title="Click to Switch Stage / Tag"
         >
-          {stageBadge.label}
-        </span>
+          <span>{stageBadge.label}</span>
+          <ChevronDown className="w-3 h-3 opacity-80" />
+        </button>
+
+        {showStageMenu && (
+          <div className="absolute right-0 top-7 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl py-1.5 z-40 text-xs animate-in fade-in zoom-in-95 duration-100">
+            <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
+              Switch Stage Tag
+            </div>
+            {STAGE_OPTIONS.map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => {
+                  onStageChange?.(lead.id || lead.conversation_id, st.id)
+                  setShowStageMenu(false)
+                }}
+                className={`w-full text-left px-3 py-2 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between transition-colors ${
+                  currentColumn === st.id ? 'text-indigo-600 bg-indigo-50/50 font-bold' : 'text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                <span>{st.label}</span>
+                {currentColumn === st.id && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Main Card Content */}
       <div className="p-4 pl-5">
-        {/* Top Header Row: Avatar, Name, Phone, Actions & Select Circle */}
-        <div className="flex items-start justify-between gap-3 mb-2 pr-14">
+        {/* Top Header Row: Avatar, Name, Phone & Select Circle */}
+        <div className="flex items-start justify-between gap-3 mb-2 pr-20">
           <div className="flex items-start gap-3">
             {/* Avatar Circle */}
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-700 to-indigo-900 flex items-center justify-center text-white font-bold text-base shadow-sm shrink-0 mt-0.5">
@@ -186,7 +243,7 @@ export default function LeadCard({
             </div>
           </div>
 
-          {/* Selection Circle (Top Right before Badge) */}
+          {/* Selection Circle */}
           <button
             type="button"
             onClick={(e) => {
@@ -204,15 +261,38 @@ export default function LeadCard({
           </button>
         </div>
 
-        {/* Source Badge */}
-        <div className="mb-3">
+        {/* Source Badge & 1-Tap Quick Tag Bar */}
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-2.5">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-[#ECEEFE] dark:bg-indigo-950/60 text-[#3D47B4] dark:text-indigo-300 border border-[#DCE2FE] dark:border-indigo-900/40">
             {lead.source || 'India Mart'}
           </span>
+
+          {/* Quick Tag Switcher Pills */}
+          <div className="flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Tag:</span>
+            {STAGE_OPTIONS.map((st) => {
+              const isActive = currentColumn === st.id
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => onStageChange?.(lead.id || lead.conversation_id, st.id)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                    isActive
+                      ? `${st.activeBg} text-white shadow-2xs`
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                  title={`Switch to ${st.label}`}
+                >
+                  {st.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Key-Value Details Grid (Exact alignment as screenshot) */}
-        <div className="space-y-1.5 text-xs text-gray-700 dark:text-gray-300 font-medium pb-2">
+        {/* Key-Value Details Grid */}
+        <div className="space-y-1.5 text-xs text-gray-700 dark:text-gray-300 font-medium pb-2 border-t border-gray-100 dark:border-gray-800/80 pt-2">
           <div className="grid grid-cols-[110px_12px_1fr] items-center">
             <span className="text-gray-500 dark:text-gray-400">Company Name</span>
             <span className="text-gray-400">:</span>
@@ -262,9 +342,9 @@ export default function LeadCard({
           </div>
         </div>
 
-        {/* Card Bottom Action Row (Matching screenshot icons) */}
-        <div className="pt-2.5 mt-2 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        {/* Card Bottom Action Row */}
+        <div className="pt-2 mt-1 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between">
+          <div className="flex items-center gap-3.5 sm:gap-4">
             {/* Timeline / Analytics */}
             <button
               type="button"
@@ -275,7 +355,7 @@ export default function LeadCard({
               <TrendingUp className="w-4 h-4" />
             </button>
 
-            {/* Change Stage */}
+            {/* Change Stage Icon */}
             <div className="relative" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
@@ -285,26 +365,6 @@ export default function LeadCard({
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
-
-              {showStageMenu && (
-                <div className="absolute left-0 bottom-8 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-30 text-xs">
-                  {STAGE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      onClick={() => {
-                        onStageChange?.(lead.id || lead.conversation_id, opt.id)
-                        setShowStageMenu(false)
-                      }}
-                      className={`w-full text-left px-3 py-1.5 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between ${
-                        currentColumn === opt.id ? 'text-indigo-600 bg-indigo-50/50' : 'text-gray-700 dark:text-gray-300'
-                      }`}
-                    >
-                      <span>{opt.label}</span>
-                      {currentColumn === opt.id && <Check className="w-3.5 h-3.5 text-indigo-600" />}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Delete Lead */}
@@ -360,10 +420,10 @@ export default function LeadCard({
             </button>
 
             {showMoreMenu && (
-              <div className="absolute right-0 bottom-8 w-40 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-30 text-xs">
+              <div className="absolute right-0 bottom-8 w-40 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 z-40 text-xs text-gray-800 dark:text-gray-200 animate-in fade-in zoom-in-95 duration-100">
                 <button
                   onClick={handleOpenChat}
-                  className="w-full text-left px-3 py-1.5 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  className="w-full text-left px-3 py-1.5 font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   View Details
                 </button>
@@ -391,3 +451,5 @@ export default function LeadCard({
     </div>
   )
 }
+
+export default memo(LeadCardComponent)
