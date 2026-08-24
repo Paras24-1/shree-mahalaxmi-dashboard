@@ -420,6 +420,15 @@ export default function Topbar({ onOpenSidebar }: TopbarProps = {}) {
                 </div>
 
                 <Link
+                  href="/hr"
+                  onClick={() => setShowProfileMenu(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl font-medium"
+                >
+                  <Users className="w-3.5 h-3.5 text-orange-500" />
+                  <span>HR & Team Operations</span>
+                </Link>
+
+                <Link
                   href="/customer"
                   onClick={() => setShowProfileMenu(false)}
                   className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl"
