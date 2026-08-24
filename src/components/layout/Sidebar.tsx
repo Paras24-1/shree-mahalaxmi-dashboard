@@ -46,7 +46,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         { name: 'Dashboard', href: '/', icon: LayoutDashboard },
         { name: 'Voice AI', href: '/analytics', icon: Mic, color: 'text-violet-500' },
         { name: 'Lead', href: '/lead', icon: Filter, color: 'text-orange-500' },
-        { name: 'Reminder', href: '/reminder', icon: Clock, color: 'text-red-500' },
+        { name: 'Follow-up', href: '/followup', icon: Clock, color: 'text-red-500' },
         { name: 'Meeting', href: '/meeting', icon: CalendarDays, color: 'text-orange-600' },
         { name: 'Chat', href: '/chat', icon: MessageSquare, color: 'text-green-500' },
       ],

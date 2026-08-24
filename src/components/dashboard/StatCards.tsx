@@ -186,10 +186,10 @@ export default function StatCards() {
 
       {/* Followups Card */}
       <div
-        onClick={() => router.push('/reminder?filter=today')}
+        onClick={() => router.push('/followups?filter=today')}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push('/reminder?filter=today') }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push('/followups?filter=today') }}
         className="bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md hover:border-red-300 dark:hover:border-red-700/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between"
       >
         <div>

@@ -239,8 +239,8 @@ export default function Topbar({ onOpenSidebar }: TopbarProps = {}) {
   const navLinks = [
     { name: 'Voice AI', href: '/analytics', icon: Mic, color: 'text-violet-500' },
     { name: 'Lead', href: '/lead', icon: Filter, color: 'text-orange-500' },
+    { name: 'Follow-up', href: '/followup', icon: Clock, color: 'text-red-500' },
     { name: 'Task', href: '/task', icon: CalendarDays, color: 'text-gray-400' },
-    { name: 'Reminder', href: '/reminder', icon: Clock, color: 'text-red-500' },
     { name: 'Meeting', href: '/meeting', icon: CalendarDays, color: 'text-orange-600' },
     { name: 'To Do', href: '/todo', icon: ListTodo, color: 'text-blue-500' },
     { name: 'Note', href: '/notes', icon: StickyNote, color: 'text-red-500' },
