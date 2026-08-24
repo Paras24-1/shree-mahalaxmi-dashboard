@@ -5,6 +5,24 @@ import { useRouter } from 'next/navigation'
 import { Filter, Send, Calendar, ListTodo, ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
+function matchesDateFilter(createdAt: string | undefined, filter: 'today' | 'yesterday'): boolean {
+  if (!createdAt) return false
+  const leadTime = new Date(createdAt).getTime()
+  if (isNaN(leadTime)) return false
+
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime()
+  const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000
+
+  if (filter === 'today') {
+    return leadTime >= startOfToday
+  }
+  if (filter === 'yesterday') {
+    return leadTime >= startOfYesterday && leadTime < startOfToday
+  }
+  return true
+}
+
 export default function StatCards() {
   const router = useRouter()
   const [stats, setStats] = useState({
@@ -16,19 +34,15 @@ export default function StatCards() {
 
   useEffect(() => {
     async function loadStats() {
-      // Get today's start and end timestamps (local day boundaries)
       const now = new Date()
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-      const startOfYesterday = new Date(startOfToday)
-      startOfYesterday.setDate(startOfYesterday.getDate() - 1)
       const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
       try {
         const [leadsRes, convsRes, tasksRes, todosRes] = await Promise.all([
-          supabase.from('leads').select('*'),
-          supabase.from('conversations').select('id, name, phone_number, stage, created_at, updated_at'),
-          supabase.from('tasks').select('*'),
-          supabase.from('todos').select('*'),
+          supabase.from('leads').select('*').order('created_at', { ascending: false }).limit(2000),
+          supabase.from('conversations').select('id, name, phone_number, stage, created_at, updated_at').order('updated_at', { ascending: false }).limit(2000),
+          supabase.from('tasks').select('*').order('created_at', { ascending: false }).limit(1000),
+          supabase.from('todos').select('*').order('created_at', { ascending: false }).limit(1000),
         ])
 
         const leadMap = new Map<string, any>()
@@ -59,36 +73,34 @@ export default function StatCards() {
         }
 
         const allUnifiedLeads = Array.from(leadMap.values())
-        const todayLeads = allUnifiedLeads.filter((l) => {
-          if (!l.created_at) return false
-          return new Date(l.created_at).getTime() >= startOfToday.getTime()
-        })
-        const yesterdayLeads = allUnifiedLeads.filter((l) => {
-          if (!l.created_at) return false
-          const t = new Date(l.created_at).getTime()
-          return t >= startOfYesterday.getTime() && t < startOfToday.getTime()
-        })
+        const todayLeads = allUnifiedLeads.filter((l) => matchesDateFilter(l.created_at, 'today'))
+        const yesterdayLeads = allUnifiedLeads.filter((l) => matchesDateFilter(l.created_at, 'yesterday'))
+        
         const completedTodayLeads = todayLeads.filter((l) =>
           ['confirm', 'confirmed', 'completed', 'deal_done', 'booked', 'won', 'closed'].includes(
             (l.stage || '').toLowerCase()
           )
         )
 
-        const todayFollowups = allUnifiedLeads.filter((l) => {
-          if (l.followup_date && l.followup_date.startsWith(todayDateStr)) return true
-          return false
-        })
-        const completedFollowups = todayFollowups.filter((l) => l.followup_notified)
+        // Followups: from followup_date today OR in processing stage
+        const processingFollowups = allUnifiedLeads.filter((l) =>
+          ['processing', 'in_process', 'followup'].includes((l.stage || '').toLowerCase())
+        )
+        const dateFollowups = allUnifiedLeads.filter((l) => l.followup_date && l.followup_date.startsWith(todayDateStr))
+        const totalFollowups = dateFollowups.length > 0 ? dateFollowups.length : processingFollowups.length
+        const completedFollowups = allUnifiedLeads.filter((l) => l.followup_notified).length
 
         const allTasks = tasksRes.data || []
         const todayTasks = allTasks.filter(
-          (t) => t.due_date === todayDateStr || (!t.due_date && t.created_at?.startsWith(todayDateStr))
+          (t) => t.due_date === todayDateStr || (!t.due_date && matchesDateFilter(t.created_at, 'today'))
         )
-        const completedTasks = todayTasks.filter((t) => t.status === 'completed')
+        const totalTasks = todayTasks.length > 0 ? todayTasks.length : allTasks.length
+        const completedTasks = (todayTasks.length > 0 ? todayTasks : allTasks).filter((t) => t.status === 'completed').length
 
         const allTodos = todosRes.data || []
-        const todayTodos = allTodos.filter((t) => t.created_at?.startsWith(todayDateStr) || true)
-        const completedTodos = todayTodos.filter((t) => t.status === 'completed')
+        const todayTodos = allTodos.filter((t) => matchesDateFilter(t.created_at, 'today'))
+        const totalTodos = todayTodos.length > 0 ? todayTodos.length : allTodos.length
+        const completedTodos = (todayTodos.length > 0 ? todayTodos : allTodos).filter((t) => t.status === 'completed').length
 
         const yCount = yesterdayLeads.length
         const tCount = todayLeads.length
@@ -106,16 +118,16 @@ export default function StatCards() {
             increase: leadIncrease,
           },
           followups: {
-            total: todayFollowups.length > 0 ? todayFollowups.length : 0,
-            completed: completedFollowups.length,
+            total: totalFollowups,
+            completed: completedFollowups,
           },
           tasks: {
-            total: todayTasks.length > 0 ? todayTasks.length : allTasks.length,
-            completed: completedTasks.length,
+            total: totalTasks,
+            completed: completedTasks,
           },
           todos: {
-            total: todayTodos.length > 0 ? todayTodos.length : allTodos.length,
-            completed: completedTodos.length,
+            total: totalTodos,
+            completed: completedTodos,
           },
         })
       } catch (err) {
