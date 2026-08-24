@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   // Fetch call logs matching this lead's phone number as caller or recipient using prefix-agnostic search
   const { data, error } = await queryClient
     .from('call_logs')
-    .select('id, duration_seconds, status, transcript, created_at')
+    .select('id, duration_seconds, status, transcript, created_at, recording_url')
     .or(`from_phone_number.ilike.%${last10}%,to_phone_number.ilike.%${last10}%`)
     .order('created_at', { ascending: false })
 

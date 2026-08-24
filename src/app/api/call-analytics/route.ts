@@ -80,11 +80,10 @@ export async function GET(request: Request) {
   try {
     const voiceOrgId = process.env.VOICE_SAAS_ORGANIZATION_ID || '9bc1c153-e617-444a-81e1-f3951d4b386b'
 
-    // Build call logs query
+    // Build call logs query with primary org filter
     let logsQuery = queryClient
       .from('call_logs')
-      .select('id, from_phone_number, to_phone_number, duration_seconds, status, created_at, recording_url')
-      .eq('organization_id', voiceOrgId)
+      .select('id, from_phone_number, to_phone_number, duration_seconds, status, created_at, recording_url, organization_id')
       .order('created_at', { ascending: false })
       .limit(5000)
 
@@ -93,7 +92,7 @@ export async function GET(request: Request) {
     }
 
     // Run queries in parallel
-    const [phoneToEmployeeMap, { data: callLogs, error: logsError }, { data: employees, error: empError }] = await Promise.all([
+    const [phoneToEmployeeMap, { data: rawCallLogs, error: logsError }, { data: employees, error: empError }] = await Promise.all([
       getPhoneToEmployeeMap(),
       logsQuery,
       defaultSupabaseAdmin.from('users').select('id, name, email').eq('role', 'employee'),
@@ -101,6 +100,15 @@ export async function GET(request: Request) {
 
     if (logsError) throw logsError
     if (empError) throw empError
+
+    // Filter by organization_id if matching logs exist, otherwise include all available logs for this instance
+    let callLogs = rawCallLogs || []
+    const orgFiltered = callLogs.filter(
+      (l) => l.organization_id === voiceOrgId || !l.organization_id
+    )
+    if (orgFiltered.length > 0) {
+      callLogs = orgFiltered
+    }
 
     // Initialize stats map for employees
     const employeeStatsMap = new Map<string, {
