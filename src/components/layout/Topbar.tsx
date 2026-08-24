@@ -279,7 +279,7 @@ export default function Topbar({ onOpenSidebar }: TopbarProps = {}) {
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all ${
                       isActive
                         ? 'text-indigo-900 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/60 shadow-2xs'
-                        : 'hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-850'
+                        : 'hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
                     }`}
                   >
                     <link.icon className={`w-3.5 h-3.5 ${link.color}`} />
@@ -324,7 +324,7 @@ export default function Topbar({ onOpenSidebar }: TopbarProps = {}) {
           {/* Dark Mode Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-850 rounded-xl transition-colors"
+            className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
             title={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {dark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}

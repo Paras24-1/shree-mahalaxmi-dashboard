@@ -143,18 +143,18 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
       </div>
 
       {/* Card Details */}
-      <div className="p-3 bg-gray-50/60 dark:bg-gray-850/40 space-y-1 text-[11px]">
+      <div className="p-3 bg-gray-50/90 dark:bg-gray-800/80 border-y border-gray-100 dark:border-gray-800/80 space-y-1.5 text-[11px]">
         {lead.company_name && (
-          <div className="flex items-start gap-1.5 text-gray-600 dark:text-gray-400">
-            <span className="font-bold text-gray-400 w-5 shrink-0">CN:</span>
-            <span className="truncate font-medium">{lead.company_name}</span>
+          <div className="flex items-start gap-1.5 text-gray-700 dark:text-gray-200">
+            <span className="font-bold text-gray-400 dark:text-gray-400 w-6 shrink-0">CN:</span>
+            <span className="truncate font-medium text-gray-800 dark:text-gray-100">{lead.company_name}</span>
           </div>
         )}
 
         {formattedDate && (
-          <div className="flex items-start gap-1.5 text-gray-500 dark:text-gray-400">
-            <span className="font-bold text-gray-400 w-5 shrink-0">CD:</span>
-            <span>{formattedDate}</span>
+          <div className="flex items-start gap-1.5 text-gray-700 dark:text-gray-200">
+            <span className="font-bold text-gray-400 dark:text-gray-400 w-6 shrink-0">CD:</span>
+            <span className="font-medium text-gray-700 dark:text-gray-200">{formattedDate}</span>
           </div>
         )}
       </div>

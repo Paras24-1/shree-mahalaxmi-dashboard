@@ -16,7 +16,7 @@ export default function LeadHeader() {
         </button>
 
         {/* Filter Dropdown */}
-        <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-gray-50 dark:bg-gray-850">
+        <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-gray-50 dark:bg-gray-800">
           <SlidersHorizontal className="w-3.5 h-3.5 text-gray-400" />
           <span>Filter</span>
           <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-1" />

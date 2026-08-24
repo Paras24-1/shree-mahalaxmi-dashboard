@@ -140,7 +140,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         className={`flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors ${
                           isGroupActive && !isOpen
                             ? 'bg-gradient-to-r from-blue-900 to-pink-500 text-white shadow-md'
-                            : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-850'
+                            : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
                         }`}
                       >
                         <div className="flex items-center gap-3">
