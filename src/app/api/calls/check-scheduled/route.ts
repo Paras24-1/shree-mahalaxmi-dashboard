@@ -20,7 +20,7 @@ async function handleCheck(req: NextRequest) {
     // 1. Fetch leads where followup_date <= now, followup_date >= yesterday, and followup_notified is false (or null)
     const { data: dueLeads, error: leadsErr } = await supabaseAdmin
       .from('leads')
-      .select('id, name, phone_number, conversation_id, followup_date, followup_notes, followup_notified, followup_action_type')
+      .select('id, name, phone_number, conversation_id, followup_date, followup_notes, followup_notified')
       .not('followup_date', 'is', null)
       .lte('followup_date', nowISO)
       .gte('followup_date', yesterday)
@@ -48,10 +48,13 @@ async function handleCheck(req: NextRequest) {
           }
         }
 
-        const actionType = lead.followup_action_type || 'manual'
+        const notes = lead.followup_notes || ''
+        const isVoiceAI = notes.includes('[Voice AI]')
+        const isManual = notes.includes('[Manual Call]')
+        const isWhatsApp = notes.includes('[WhatsApp]')
 
-        // If action type is NOT voice_ai, do NOT auto-dial customer!
-        if (actionType !== 'voice_ai') {
+        // If explicitly set to Manual or WhatsApp, do NOT auto-dial customer!
+        if (isManual || isWhatsApp) {
           // Just mark notified and record scheduled reminder activity
           await supabaseAdmin
             .from('leads')
@@ -64,15 +67,15 @@ async function handleCheck(req: NextRequest) {
           try {
             await supabaseAdmin.from('lead_activities').insert({
               lead_id: lead.id,
-              activity_type: actionType === 'whatsapp' ? 'message' : 'note',
-              description: `Follow-up reminder due (${actionType === 'whatsapp' ? 'WhatsApp Reminder' : 'Manual Employee Call'})`,
+              activity_type: isWhatsApp ? 'message' : 'note',
+              description: `Follow-up reminder due (${isWhatsApp ? 'WhatsApp Reminder' : 'Manual Employee Call'})`,
               notes: lead.followup_notes || 'Follow-up notification due',
             })
           } catch {}
 
           results.push({
             lead_id: lead.id,
-            action: actionType,
+            action: isWhatsApp ? 'whatsapp' : 'manual',
             status: 'reminder_notified_no_call',
           })
           continue

@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+// Valid columns that exist in the Supabase 'leads' table
+const VALID_LEAD_COLUMNS = new Set([
+  'name',
+  'phone_number',
+  'conversation_id',
+  'stage',
+  'source',
+  'company_name',
+  'notes',
+  'followup_date',
+  'followup_notes',
+  'followup_notified',
+  'assigned_to',
+  'created_at',
+  'updated_at',
+])
+
 // GET /api/leads or /api/leads?conversation_id=xxx
 export async function GET(req: NextRequest) {
   try {
@@ -32,11 +49,10 @@ export async function GET(req: NextRequest) {
 }
 
 // PATCH /api/leads
-// Body: Partial<Lead> & { conversation_id?: string; lead_id?: string; id?: string }
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { conversation_id, lead_id, id, ...updates } = body
+    const { conversation_id, lead_id, id, followup_action_type, ...rawUpdates } = body
 
     const targetConvId = conversation_id || (lead_id ? undefined : id)
     const targetLeadId = id || lead_id
@@ -48,8 +64,31 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
+    // Filter only valid columns to avoid Supabase schema cache rejection
+    const updates: Record<string, any> = {}
+    for (const [key, value] of Object.entries(rawUpdates)) {
+      if (VALID_LEAD_COLUMNS.has(key)) {
+        updates[key] = value
+      }
+    }
+
+    // Embed action type into followup_notes if action type is specified
+    if (followup_action_type && updates.followup_notes !== undefined) {
+      const tag =
+        followup_action_type === 'voice_ai'
+          ? '[Voice AI]'
+          : followup_action_type === 'manual'
+          ? '[Manual Call]'
+          : '[WhatsApp]'
+      let currentNotes = (updates.followup_notes || '').replace(/^\[(Voice AI|Manual Call|WhatsApp)\]\s*/i, '')
+      updates.followup_notes = currentNotes ? `${tag} ${currentNotes}` : tag
+    }
+
+    updates.updated_at = new Date().toISOString()
+
     let updatedLead = null
 
+    // 1. Try update by lead ID
     if (targetLeadId) {
       const { data, error } = await supabaseAdmin
         .from('leads')
@@ -63,6 +102,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // 2. Try update by conversation_id
     if (!updatedLead && targetConvId) {
       const { data, error } = await supabaseAdmin
         .from('leads')
@@ -76,7 +116,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // If lead doesn't exist yet in leads table, create/upsert it
+    // 3. If lead doesn't exist yet in leads table, create/insert it
     if (!updatedLead && targetConvId) {
       try {
         const { data: conv } = await supabaseAdmin
@@ -85,18 +125,20 @@ export async function PATCH(req: NextRequest) {
           .eq('id', targetConvId)
           .maybeSingle()
 
+        const newLeadPayload: Record<string, any> = {
+          conversation_id: targetConvId,
+          name: conv?.name || updates.name || null,
+          phone_number: conv?.phone_number || updates.phone_number || null,
+          stage: updates.stage || conv?.stage || 'new',
+          assigned_to: conv?.assigned_to || updates.assigned_to || null,
+          source: 'WhatsApp Direct',
+          ...updates,
+          created_at: new Date().toISOString(),
+        }
+
         const { data: inserted, error: insertError } = await supabaseAdmin
           .from('leads')
-          .insert({
-            conversation_id: targetConvId,
-            name: conv?.name || null,
-            phone_number: conv?.phone_number || null,
-            stage: updates.stage || conv?.stage || 'new',
-            assigned_to: conv?.assigned_to || null,
-            source: 'WhatsApp Direct',
-            ...updates,
-            created_at: new Date().toISOString(),
-          })
+          .insert(newLeadPayload)
           .select()
           .maybeSingle()
 
@@ -108,7 +150,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // Sync name, stage, and notes back to conversations table
+    // 4. Sync name, stage, and notes back to conversations table
     const convIdToSync = targetConvId || updatedLead?.conversation_id
     if (convIdToSync) {
       const convUpdates: Record<string, any> = {}
@@ -121,6 +163,44 @@ export async function PATCH(req: NextRequest) {
           .from('conversations')
           .update(convUpdates)
           .eq('id', convIdToSync)
+      }
+    }
+
+    // 5. Synchronize with schedules table if followup_date was set or cleared
+    if (updates.followup_date !== undefined) {
+      const leadName = updatedLead?.name || 'Customer'
+      const title = `Follow-up: ${leadName}`
+
+      if (updates.followup_date) {
+        try {
+          // Check if schedule already exists for this lead
+          const { data: existingSched } = await supabaseAdmin
+            .from('schedules')
+            .select('id')
+            .ilike('title', `%${leadName}%`)
+            .maybeSingle()
+
+          if (existingSched) {
+            await supabaseAdmin
+              .from('schedules')
+              .update({
+                scheduled_at: updates.followup_date,
+                notes: updates.followup_notes || 'Lead Follow-up Reminder',
+                type: 'reminder',
+              })
+              .eq('id', existingSched.id)
+          } else {
+            await supabaseAdmin.from('schedules').insert({
+              title,
+              scheduled_at: updates.followup_date,
+              notes: updates.followup_notes || 'Lead Follow-up Reminder',
+              type: 'reminder',
+              created_at: new Date().toISOString(),
+            })
+          }
+        } catch (schedErr) {
+          console.error('Schedules sync error:', schedErr)
+        }
       }
     }
 

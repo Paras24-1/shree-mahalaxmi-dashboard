@@ -29,7 +29,7 @@ export default function SchedulesWidget() {
         supabase.from('schedules').select('*').order('scheduled_at', { ascending: true }),
         supabase
           .from('leads')
-          .select('id, name, phone_number, conversation_id, stage, followup_date, followup_notes, followup_action_type, followup_notified')
+          .select('id, name, phone_number, conversation_id, stage, followup_date, followup_notes, followup_notified')
           .not('followup_date', 'is', null)
           .order('followup_date', { ascending: true })
           .limit(100),
@@ -49,15 +49,23 @@ export default function SchedulesWidget() {
       if (leadsRes.data) {
         const enriched = leadsRes.data.map((l) => {
           const conv = l.conversation_id ? convMap.get(l.conversation_id) : null
+          const rawNotes = l.followup_notes || ''
+          const actionType = rawNotes.includes('[Manual Call]')
+            ? 'manual'
+            : rawNotes.includes('[WhatsApp]')
+            ? 'whatsapp'
+            : 'voice_ai'
+          const cleanNotes = rawNotes.replace(/^\[(Voice AI|Manual Call|WhatsApp)\]\s*/i, '')
+
           return {
             id: l.id || l.conversation_id,
             conversation_id: l.conversation_id || l.id,
             name: l.name || conv?.name || (l.phone_number ? `Lead ${l.phone_number.slice(-4)}` : 'Customer'),
             phone_number: l.phone_number || conv?.phone_number,
             scheduled_at: l.followup_date,
-            title: `Follow-up with ${l.name || conv?.name || 'Customer'}`,
-            notes: l.followup_notes || 'Scheduled follow-up reminder',
-            action_type: l.followup_action_type || 'voice_ai',
+            title: `Follow-up: ${l.name || conv?.name || 'Customer'}`,
+            notes: cleanNotes || 'Scheduled follow-up reminder',
+            action_type: actionType,
             type: 'reminder',
             isLeadFollowup: true,
           }
