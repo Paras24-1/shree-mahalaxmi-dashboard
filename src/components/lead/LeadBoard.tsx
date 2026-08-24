@@ -390,24 +390,6 @@ export default function LeadBoard() {
         </div>
       )}
 
-      {/* Top Filter Chips */}
-      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 text-xs">
-        {COLUMNS.map((col) => {
-          const count = filteredLeads.filter((l) => getLeadColumn(l.stage, l.created_at) === col.id).length
-          return (
-            <div
-              key={col.id}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 whitespace-nowrap shadow-2xs"
-            >
-              <span className="font-semibold">{col.title}</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                {count}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-
       {/* 5-Column Kanban Board */}
       <div className="flex-1 flex overflow-x-auto gap-4 pb-4 min-h-[500px]">
         {COLUMNS.map((col) => {
