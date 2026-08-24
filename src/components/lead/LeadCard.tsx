@@ -105,10 +105,15 @@ export default function LeadCard({ lead, onDelete, onStageChange }: LeadCardProp
         </div>
 
         {lead.phone_number && (
-          <p className="text-[11px] text-gray-500 font-mono font-medium mb-2 flex items-center gap-1">
-            <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+          <a
+            href={`tel:${lead.phone_number.replace(/\s+/g, '')}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[11px] text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-mono font-medium mb-2 flex items-center gap-1.5 w-fit hover:underline transition-colors"
+            title={`Call ${lead.phone_number}`}
+          >
+            <Phone className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{lead.phone_number}</span>
-          </p>
+          </a>
         )}
 
         <div className="flex items-center gap-1.5 flex-wrap">

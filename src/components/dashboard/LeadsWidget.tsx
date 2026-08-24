@@ -103,9 +103,15 @@ export default function LeadsWidget() {
                   <UsersIcon /> {lead.name || `Lead #${lead.phone_number?.slice(-4) || 'Contact'}`}
                 </h4>
                 {lead.phone_number && (
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-green-600" /> {lead.phone_number}
-                  </span>
+                  <a
+                    href={`tel:${lead.phone_number.replace(/\s+/g, '')}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs font-semibold text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 flex items-center gap-1.5 bg-green-50 dark:bg-green-950/50 hover:bg-green-100 dark:hover:bg-green-900/50 px-2.5 py-1 rounded-lg border border-green-200/80 dark:border-green-800/60 transition-all shadow-2xs group/phone"
+                    title={`Call ${lead.phone_number}`}
+                  >
+                    <Phone className="w-3 h-3 text-green-600 dark:text-green-400 group-hover/phone:scale-110 transition-transform" />
+                    <span className="font-mono">{lead.phone_number}</span>
+                  </a>
                 )}
               </div>
               
