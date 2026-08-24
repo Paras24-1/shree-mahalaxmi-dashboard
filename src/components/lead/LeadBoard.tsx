@@ -111,7 +111,7 @@ function matchesDateFilter(
   return true
 }
 
-const SOURCES = ['All', 'WhatsApp CRM', 'Face Book', 'India Mart', 'Google Ads', 'Referral']
+const SOURCES = ['All', 'India Mart', 'Face Book', 'Google Ads', 'WhatsApp CRM', 'Referral']
 
 export default function LeadBoard() {
   const router = useRouter()
@@ -131,7 +131,7 @@ export default function LeadBoard() {
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'card_list' | 'kanban'>('card_list')
 
-  // Pagination / Chunk Rendering for Super-Fast Performance
+  // Pagination / Chunk Rendering for fast scroll
   const [renderLimit, setRenderLimit] = useState(40)
 
   // Modals & Menus
@@ -149,7 +149,6 @@ export default function LeadBoard() {
 
   const filterRef = useRef<HTMLDivElement>(null)
   const moreRef = useRef<HTMLDivElement>(null)
-  const observerTarget = useRef<HTMLDivElement>(null)
 
   // Close menus on outside click
   useEffect(() => {
@@ -165,20 +164,68 @@ export default function LeadBoard() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Fetch leads from Supabase with lightweight selection
+  // Unified Lead Loader: Combines leads table + conversations table for 100% complete & accurate data
   const fetchLeads = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(2000)
+      const [leadsRes, convsRes] = await Promise.all([
+        supabase
+          .from('leads')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(2000),
+        supabase
+          .from('conversations')
+          .select('id, name, phone_number, stage, assigned_to, created_at, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(2000),
+      ])
 
-      if (error) throw error
-      setLeads(data || [])
+      const leadMap = new Map<string, any>()
+
+      // 1. Load all conversations as base leads
+      if (convsRes.data) {
+        convsRes.data.forEach((c) => {
+          leadMap.set(c.id, {
+            id: c.id,
+            conversation_id: c.id,
+            name: c.name || (c.phone_number ? `Lead ${c.phone_number.slice(-4)}` : 'Customer'),
+            phone_number: c.phone_number,
+            stage: c.stage || 'new',
+            source: 'India Mart',
+            assigned_to: c.assigned_to,
+            created_at: c.created_at || c.updated_at || new Date().toISOString(),
+          })
+        })
+      }
+
+      // 2. Merge with leads table records for rich metadata (company, notes, specific source, etc.)
+      if (leadsRes.data) {
+        leadsRes.data.forEach((l) => {
+          const key = l.conversation_id || l.id
+          const existing = leadMap.get(key)
+          leadMap.set(key, {
+            ...existing,
+            ...l,
+            id: l.id || existing?.id,
+            conversation_id: l.conversation_id || existing?.conversation_id || l.id,
+            name: l.name || existing?.name || (l.phone_number ? `Lead ${l.phone_number.slice(-4)}` : 'Customer'),
+            phone_number: l.phone_number || existing?.phone_number,
+            stage: l.stage || existing?.stage || 'new',
+            source: l.source || existing?.source || 'India Mart',
+            company_name: l.company_name || existing?.company_name || null,
+            created_at: l.created_at || existing?.created_at,
+          })
+        })
+      }
+
+      const mergedLeads = Array.from(leadMap.values()).sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
+
+      setLeads(mergedLeads)
     } catch (err) {
-      console.error('Error fetching leads:', err)
+      console.error('Error fetching unified leads:', err)
     } finally {
       setLoading(false)
     }
@@ -187,42 +234,45 @@ export default function LeadBoard() {
   useEffect(() => {
     fetchLeads()
 
-    // Real-time subscription
-    const channel = supabase
-      .channel(`leads-realtime-${Date.now()}`)
+    // Real-time subscription to leads & conversations
+    const leadChannel = supabase
+      .channel(`leads-unified-realtime-${Date.now()}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setLeads((prev) => [payload.new, ...prev])
-          } else if (payload.eventType === 'UPDATE') {
-            setLeads((prev) => prev.map((l) => (l.id === payload.new.id ? { ...l, ...payload.new } : l)))
-          } else if (payload.eventType === 'DELETE') {
-            setLeads((prev) => prev.filter((l) => l.id !== payload.old.id))
-          }
-        }
+        () => fetchLeads()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversations' },
+        () => fetchLeads()
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(leadChannel)
     }
   }, [])
 
-  // Ultra-Fast Optimistic Stage Change Handler
+  // Optimistic 0ms Stage Change Handler with Dual Database Sync
   const handleStageChange = useCallback(async (leadId: string, newStage: string) => {
-    // 1. Instant 0ms local state update
+    // 1. Instant optimistic update
     setLeads((prev) =>
       prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, stage: newStage } : l))
     )
 
-    // 2. Background database sync
+    // 2. Background update to leads and conversations
     try {
-      await supabase
-        .from('leads')
-        .update({ stage: newStage, updated_at: new Date().toISOString() })
-        .or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
+      await Promise.all([
+        supabase
+          .from('leads')
+          .update({ stage: newStage, updated_at: new Date().toISOString() })
+          .or(`id.eq.${leadId},conversation_id.eq.${leadId}`),
+        supabase
+          .from('conversations')
+          .update({ stage: newStage, updated_at: new Date().toISOString() })
+          .eq('id', leadId),
+      ])
     } catch (err) {
       console.error('Failed to change stage:', err)
     }
@@ -233,10 +283,16 @@ export default function LeadBoard() {
     if (!window.confirm('Are you sure you want to delete this lead?')) return
     setLeads((prev) => prev.filter((l) => l.id !== leadId && l.conversation_id !== leadId))
     try {
-      await supabase
-        .from('leads')
-        .delete()
-        .or(`id.eq.${leadId},conversation_id.eq.${leadId}`)
+      await Promise.all([
+        supabase
+          .from('leads')
+          .delete()
+          .or(`id.eq.${leadId},conversation_id.eq.${leadId}`),
+        supabase
+          .from('conversations')
+          .delete()
+          .eq('id', leadId),
+      ])
     } catch (err) {
       console.error('Failed to delete lead:', err)
     }
@@ -248,6 +304,7 @@ export default function LeadBoard() {
     if (!newName.trim()) return
     setSavingLead(true)
     try {
+      const nowISO = new Date().toISOString()
       const { data, error } = await supabase
         .from('leads')
         .insert({
@@ -256,7 +313,7 @@ export default function LeadBoard() {
           company_name: newCompany.trim() || null,
           source: newSource,
           stage: newStage,
-          created_at: new Date().toISOString(),
+          created_at: nowISO,
         })
         .select()
         .single()
