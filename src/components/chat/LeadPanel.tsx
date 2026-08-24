@@ -129,10 +129,11 @@ const computeLeadScore = (data: any, conversation?: Conversation | null): { scor
   return { score, label, color }
 }
 
-export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
+export default function LeadPanel({ conversation, lead, onLeadUpdate, onClose }: {
   conversation: Conversation | null
   lead: Lead | null
   onLeadUpdate: (updates: Partial<Lead>) => void
+  onClose?: () => void
 }) {
   const [loading, setLoading] = useState(false)
   const [sheetData, setSheetData] = useState<any>(null)
@@ -630,14 +631,25 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-950 relative">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center">
-            <User className="w-4 h-4 text-white" />
+      <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center">
+              <User className="w-4 h-4 text-white" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Lead Details</h3>
           </div>
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Lead Details</h3>
+          <p className="text-xs text-gray-500 ml-10">Live sync from Google Sheets</p>
         </div>
-        <p className="text-xs text-gray-500 ml-10">Live sync from Google Sheets</p>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            title="Close Lead Details"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Content */}

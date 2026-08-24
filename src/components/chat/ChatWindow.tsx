@@ -345,7 +345,7 @@ ${summaryData.keyPoints.map((p) => `  - ${p}`).join('\n')}
               title="Toggle Lead Details"
             >
               <Info className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Lead Info</span>
+              <span className="inline">Lead Info</span>
             </button>
           )}
 

@@ -181,7 +181,10 @@ function ChatContent() {
         <div className="flex items-center gap-2">
           {mobileView !== 'list' && (
             <button
-              onClick={() => setMobileView('list')}
+              onClick={() => {
+                if (mobileView === 'lead') setMobileView('chat')
+                else setMobileView('list')
+              }}
               className="p-1 rounded-lg text-gray-600 hover:bg-gray-200 dark:text-gray-300"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -197,7 +200,7 @@ function ChatContent() {
         {selected && mobileView === 'chat' && (
           <button
             onClick={() => setMobileView('lead')}
-            className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 text-xs font-semibold flex items-center gap-1"
+            className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-xs font-semibold flex items-center gap-1"
           >
             <Info className="w-4 h-4" />
             <span>Lead Info</span>
@@ -226,8 +229,7 @@ function ChatContent() {
         <div
           className={`
             flex-1 flex flex-col overflow-hidden min-w-0
-            ${mobileView === 'chat' ? 'flex' : 'hidden'}
-            md:flex
+            ${mobileView === 'chat' ? 'flex w-full md:w-auto' : 'hidden md:flex'}
           `}
         >
           <ChatWindow
@@ -242,23 +244,37 @@ function ChatContent() {
                 setLead((prev) => (prev ? { ...prev, stage: newStage } : null))
               }
             }}
-            onToggleLeadPanel={() => setShowDesktopLeadPanel((v) => !v)}
-            showLeadPanel={showDesktopLeadPanel}
+            onToggleLeadPanel={() => {
+              if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                setMobileView((prev) => (prev === 'lead' ? 'chat' : 'lead'))
+              } else {
+                setShowDesktopLeadPanel((v) => !v)
+              }
+            }}
+            showLeadPanel={showDesktopLeadPanel || mobileView === 'lead'}
           />
         </div>
 
         {/* Right Column: Lead Panel */}
         <div
           className={`
-            flex flex-col overflow-hidden border-l border-gray-200 dark:border-gray-800
-            ${mobileView === 'lead' ? 'flex w-full' : 'hidden'}
-            ${showDesktopLeadPanel ? 'md:flex md:w-80 md:shrink-0' : 'hidden 2xl:flex 2xl:w-80 2xl:shrink-0'}
+            flex flex-col overflow-hidden border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900
+            ${mobileView === 'lead' ? 'flex w-full z-20' : 'hidden'}
+            ${
+              showDesktopLeadPanel
+                ? 'md:flex md:absolute md:right-0 md:top-0 md:bottom-0 md:w-80 md:z-30 md:shadow-2xl xl:relative xl:shadow-none xl:z-auto xl:w-80 xl:shrink-0'
+                : 'hidden 2xl:flex 2xl:w-80 2xl:shrink-0'
+            }
           `}
         >
           <LeadPanel
             conversation={selected}
             lead={lead}
             onLeadUpdate={handleLeadUpdate}
+            onClose={() => {
+              setMobileView('chat')
+              setShowDesktopLeadPanel(false)
+            }}
           />
         </div>
       </div>
