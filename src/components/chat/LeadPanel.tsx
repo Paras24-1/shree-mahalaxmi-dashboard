@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Conversation, Lead, LeadActivity } from '@/types'
+import { calculateLeadScore } from '@/lib/leadScoring'
 import {
   RefreshCw,
   Phone,
@@ -82,51 +83,48 @@ const parseTranscript = (transcriptText: string) => {
 };
 
 // Helper to compute realistic dynamic lead score if not explicitly set
-const computeLeadScore = (data: any, conversation?: Conversation | null): { score: number; label: string; color: string } => {
+const computeLeadScore = (
+  data: any,
+  conversation?: Conversation | null,
+  summaryData?: any | null
+): { score: number; label: string; color: string; description: string; factors: string[] } => {
+  // If summaryData already provides computed dynamic leadScore
+  if (summaryData?.leadScore?.score) {
+    return summaryData.leadScore
+  }
+
   const explicit = Number(data?.lead_score)
-  let score = !isNaN(explicit) && explicit > 0 ? explicit : 0
 
-  if (score === 0) {
-    const stage = (conversation?.stage || data?.stage || 'new').toLowerCase()
-    score = 50
-    if (['hot_customer', 'confirmed', 'completed', 'booking'].includes(stage)) {
-      score = 88
-    } else if (['interested', 'callback_done_by_ai'].includes(stage)) {
-      score = 78
-    } else if (['call_done', 'followup'].includes(stage)) {
-      score = 65
-    } else if (['new'].includes(stage)) {
-      score = 52
-    } else if (['low_budget'].includes(stage)) {
-      score = 35
-    } else if (['not_connected'].includes(stage)) {
-      score = 25
-    } else if (['not_interested', 'cancelled'].includes(stage)) {
-      score = 15
+  const result = calculateLeadScore({
+    stage: conversation?.stage || data?.stage,
+    lead_quality: data?.lead_quality,
+    machine_interest: data?.machine_interest,
+    callback_ready: data?.callback_ready,
+    lead_score: explicit,
+    conversation_summary: data?.conversation_summary || summaryData?.overview,
+    intent: summaryData?.intent,
+    sentiment: summaryData?.sentiment,
+    products: summaryData?.products,
+  })
+
+  if (!isNaN(explicit) && explicit > 0 && !summaryData?.intent) {
+    result.score = explicit
+    if (result.score >= 75) {
+      result.label = 'Hot Lead'
+      result.color = 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800'
+      result.description = 'High Conversion Intent'
+    } else if (result.score < 45) {
+      result.label = 'Cold / Fresh Lead'
+      result.color = 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+      result.description = 'Cold / Fresh / Low Interaction'
+    } else {
+      result.label = 'Warm Lead'
+      result.color = 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800'
+      result.description = 'Medium Engagement'
     }
-
-    const quality = (data?.lead_quality || '').toLowerCase()
-    if (quality.includes('high') || quality.includes('hot')) score += 10
-    else if (quality.includes('medium') || quality.includes('warm')) score += 5
-    else if (quality.includes('low') || quality.includes('cold')) score -= 10
-
-    if (data?.machine_interest && data.machine_interest.trim()) score += 5
-    if (data?.callback_ready && String(data.callback_ready).toLowerCase() === 'yes') score += 5
-
-    score = Math.max(10, Math.min(98, score))
   }
 
-  let label = 'Warm Lead'
-  let color = 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50'
-  if (score >= 75) {
-    label = 'Hot Lead'
-    color = 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
-  } else if (score < 50) {
-    label = 'Cold / Fresh Lead'
-    color = 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800'
-  }
-
-  return { score, label, color }
+  return result
 }
 
 export default function LeadPanel({ conversation, lead, onLeadUpdate, onClose }: {
@@ -672,7 +670,7 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
 
             {/* Lead Score Card with Dynamic Score & Progress Bar */}
             {(() => {
-              const { score, label, color } = computeLeadScore(data, conversation)
+              const { score, label, color, description } = computeLeadScore(data, conversation, summaryData)
               return (
                 <div className="p-3.5 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-emerald-200 dark:hover:border-emerald-900 transition-colors space-y-2">
                   <div className="flex items-center justify-between">
@@ -693,7 +691,7 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
                       <span className="text-xs text-gray-400 font-medium">/ 100</span>
                     </div>
                     <span className="text-[10px] text-gray-400 font-medium">
-                      {score >= 75 ? 'High Conversion Intent' : score >= 50 ? 'Medium Engagement' : 'Cold / Fresh Lead'}
+                      {description || (score >= 75 ? 'High Conversion Intent' : score >= 45 ? 'Medium Engagement' : 'Cold / Low Engagement')}
                     </span>
                   </div>
 
@@ -703,7 +701,7 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
                       className={`h-full rounded-full transition-all duration-500 ${
                         score >= 75
                           ? 'bg-emerald-500'
-                          : score >= 50
+                          : score >= 45
                           ? 'bg-amber-500'
                           : 'bg-slate-400'
                       }`}

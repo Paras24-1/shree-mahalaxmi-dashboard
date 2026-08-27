@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { calculateLeadScore, LeadScoreOutput } from '@/lib/leadScoring'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -11,6 +12,7 @@ interface SummaryData {
   keyPoints: string[]
   nextAction: string
   sentiment: 'positive' | 'neutral' | 'inquiry' | 'urgent'
+  leadScore?: LeadScoreOutput
 }
 
 function generateSmartSummary(messages: any[], lead: any): SummaryData {
@@ -121,6 +123,19 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
   const prodStr = detectedProducts.size > 0 ? Array.from(detectedProducts).slice(0, 3).join(', ') : 'machinery and equipment'
   const overview = `${customerName} engaged in ${totalCount} messages regarding ${prodStr}. Primary intent is ${intent.toLowerCase()}.`
 
+  // Calculate interest-based lead score
+  const leadScoreResult = calculateLeadScore({
+    stage: lead?.stage,
+    lead_quality: lead?.lead_quality,
+    machine_interest: lead?.machine_interest,
+    callback_ready: lead?.callback_ready,
+    conversation_summary: lead?.conversation_summary,
+    messages: messages,
+    intent,
+    sentiment,
+    products: Array.from(detectedProducts),
+  })
+
   return {
     overview,
     intent,
@@ -128,6 +143,7 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
     keyPoints: keyPoints.length > 0 ? keyPoints : ['Discussion on machine specifications and production capacity.'],
     nextAction,
     sentiment,
+    leadScore: leadScoreResult,
   }
 }
 
