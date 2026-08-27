@@ -30,10 +30,10 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
   const incomingMsgs = messages.filter((m) => m.direction === 'incoming')
   const outgoingMsgs = messages.filter((m) => m.direction === 'outgoing')
 
-  // Extract products/machine keywords
+  // Extract products/machine keywords ONLY from customer (incoming) messages or lead profile
   const knownKeywords = [
     'agarbatti', 'incense', 'dhoop', 'dhoop stick', 'dhoop cone', 'raw material',
-    'bamboo stick', 'premix', 'automatic', 'manual', 'semi-automatic',
+    'bamboo stick', 'premix', 'automatic', 'semi-automatic', 'semi automatic',
     'packaging', 'packing', 'dryer', 'grinder', 'mixer', 'powder',
     'hydraulic', 'pouch', 'camphor', 'cotton wick', 'perfume', 'fragrance',
     'coating', 'feeder', 'spare parts', 'motor', 'piston', 'sensor',
@@ -41,38 +41,45 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
   ]
 
   const detectedProducts = new Set<string>()
-  if (lead?.machine_interest) {
-    detectedProducts.add(lead.machine_interest)
+  if (lead?.machine_interest && String(lead.machine_interest).trim()) {
+    detectedProducts.add(lead.machine_interest.trim())
   }
 
-  const fullText = messages.map((m) => m.message || '').join(' ').toLowerCase()
+  const customerText = incomingMsgs.map((m) => m.message || '').join(' ').toLowerCase()
   for (const kw of knownKeywords) {
-    if (fullText.includes(kw)) {
+    if (customerText.includes(kw)) {
       detectedProducts.add(kw.charAt(0).toUpperCase() + kw.slice(1))
     }
   }
 
-  // Detect intent
-  let intent = 'General Inquiry & Machine Information'
-  let sentiment: 'positive' | 'neutral' | 'inquiry' | 'urgent' = 'inquiry'
+  // Check if customer only sent ad template / greeting
+  const isTemplateOrGreeting =
+    customerText.includes('can i get more info') ||
+    customerText.includes('more info on this') ||
+    customerText.includes('more information') ||
+    customerText.trim() === 'hi' ||
+    customerText.trim() === 'hello' ||
+    customerText.trim() === 'namaste' ||
+    customerText.trim() === 'interested' ||
+    customerText.length <= 5
 
-  if (fullText.includes('price') || fullText.includes('rate') || fullText.includes('cost') || fullText.includes('quotation') || fullText.includes('kitne')) {
+  // Detect intent strictly from customer text
+  let intent = isTemplateOrGreeting ? 'Initial Ad Inquiry (1-Message / Awaiting Reply)' : 'General Inquiry'
+  let sentiment: 'positive' | 'neutral' | 'inquiry' | 'urgent' = isTemplateOrGreeting ? 'neutral' : 'inquiry'
+
+  if (customerText.includes('price') || customerText.includes('rate') || customerText.includes('cost') || customerText.includes('quotation') || customerText.includes('kitne') || customerText.includes('kitna')) {
     intent = 'Pricing & Quotation Request'
     sentiment = 'inquiry'
-  }
-  if (fullText.includes('buy') || fullText.includes('purchase') || fullText.includes('order') || fullText.includes('book') || fullText.includes('payment') || fullText.includes('advance')) {
+  } else if (customerText.includes('buy') || customerText.includes('purchase') || customerText.includes('order') || customerText.includes('book') || customerText.includes('payment') || customerText.includes('advance') || customerText.includes('kharidna')) {
     intent = 'Ready to Purchase / Booking Stage'
     sentiment = 'positive'
-  }
-  if (fullText.includes('demo') || fullText.includes('visit') || fullText.includes('factory') || fullText.includes('office') || fullText.includes('address')) {
+  } else if (customerText.includes('demo') || customerText.includes('visit') || customerText.includes('factory') || customerText.includes('office') || customerText.includes('address') || customerText.includes('kaha aana')) {
     intent = 'Factory Visit / Demo Request'
     sentiment = 'positive'
-  }
-  if (fullText.includes('call me') || fullText.includes('phone') || fullText.includes('urgent') || fullText.includes('jaldi') || fullText.includes('help')) {
+  } else if (customerText.includes('call me') || customerText.includes('phone') || customerText.includes('urgent') || customerText.includes('jaldi') || customerText.includes('help') || customerText.includes('baat karni')) {
     intent = 'Callback / Urgent Assistance Required'
     sentiment = 'urgent'
-  }
-  if (fullText.includes('not interested') || fullText.includes('cancel') || fullText.includes('no need')) {
+  } else if (customerText.includes('not interested') || customerText.includes('cancel') || customerText.includes('no need') || customerText.includes('nahi chahiye')) {
     intent = 'Not Interested / Inquiry Closed'
     sentiment = 'neutral'
   }
@@ -83,7 +90,7 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
   if (incomingMsgs.length > 0) {
     const firstIn = incomingMsgs[0].message
     if (firstIn && firstIn.length > 3) {
-      keyPoints.push(`Customer initiated inquiry: "${firstIn.slice(0, 100)}${firstIn.length > 100 ? '...' : ''}"`)
+      keyPoints.push(`Customer inquiry: "${firstIn.slice(0, 100)}${firstIn.length > 100 ? '...' : ''}"`)
     }
   }
 
@@ -98,15 +105,15 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
     }
   }
 
-  if (incomingMsgs.length > 0) {
+  if (incomingMsgs.length > 1) {
     const lastIn = incomingMsgs[incomingMsgs.length - 1].message
-    if (lastIn && incomingMsgs.length > 1) {
-      keyPoints.push(`Latest customer message: "${lastIn.slice(0, 90)}${lastIn.length > 90 ? '...' : ''}"`)
+    if (lastIn && lastIn !== incomingMsgs[0].message) {
+      keyPoints.push(`Latest customer follow-up: "${lastIn.slice(0, 90)}${lastIn.length > 90 ? '...' : ''}"`)
     }
   }
 
   // Determine next action
-  let nextAction = 'Follow up with machine specifications and video demo.'
+  let nextAction = 'Send product catalog and follow up via WhatsApp or call.'
   if (intent.includes('Pricing') || intent.includes('Quotation')) {
     nextAction = 'Send formal quotation with price breakdown and payment terms.'
   } else if (intent.includes('Purchase') || intent.includes('Booking')) {
@@ -114,14 +121,16 @@ function generateSmartSummary(messages: any[], lead: any): SummaryData {
   } else if (intent.includes('Visit') || intent.includes('Demo')) {
     nextAction = 'Schedule factory visit slot and share location map on WhatsApp.'
   } else if (intent.includes('Callback')) {
-    nextAction = 'Call client immediately to discuss technical requirements.'
+    nextAction = 'Call client immediately to discuss requirements.'
   }
 
   // Overview summary text
   const totalCount = messages.length
   const customerName = lead?.name || messages[0]?.phone_number || 'The customer'
-  const prodStr = detectedProducts.size > 0 ? Array.from(detectedProducts).slice(0, 3).join(', ') : 'machinery and equipment'
-  const overview = `${customerName} engaged in ${totalCount} messages regarding ${prodStr}. Primary intent is ${intent.toLowerCase()}.`
+  const prodStr = detectedProducts.size > 0 ? Array.from(detectedProducts).slice(0, 3).join(', ') : 'machinery catalog'
+  const overview = isTemplateOrGreeting && incomingMsgs.length <= 2 && outgoingMsgs.length > 0
+    ? `${customerName} clicked an initial ad inquiry. No customer reply after our welcome message yet.`
+    : `${customerName} engaged in ${totalCount} messages regarding ${prodStr}. Primary intent is ${intent.toLowerCase()}.`
 
   // Calculate interest-based lead score
   const leadScoreResult = calculateLeadScore({

@@ -1,7 +1,7 @@
 // ============================================================
 // Dynamic Lead Scoring Utility
-// Calculates an accurate 0-100 lead score based on customer engagement,
-// message flow/responsiveness, inquiry intent, machine interest, and stage.
+// Calculates an accurate 0-100 lead score strictly based on
+// customer (incoming) engagement, responsiveness, intent, and stage.
 // ============================================================
 
 export interface LeadScoreParams {
@@ -29,11 +29,35 @@ export interface LeadScoreOutput {
   factors: string[]
 }
 
-const GREETING_WORDS = new Set([
-  'hi', 'hello', 'hey', 'hlo', 'hii', 'hiii', 'helo', 'hllo',
-  'namaste', 'namaskar', 'pranam', 'good morning', 'good afternoon',
-  'good evening', 'test', 'sir', 'bhai', 'ji', '🙏', '👍', 'k', 'ok'
-])
+const GREETING_OR_TEMPLATE_PHRASES = [
+  'hello! can i get more info on this?',
+  'can i get more info on this?',
+  'can i get more info',
+  "i'm interested in this. can you give me more details?",
+  "i'm interested in this",
+  'please provide more information',
+  'more info',
+  'hi',
+  'hello',
+  'hey',
+  'hlo',
+  'hii',
+  'hiii',
+  'helo',
+  'hllo',
+  'namaste',
+  'namaskar',
+  'pranam',
+  'good morning',
+  'good afternoon',
+  'good evening',
+  'test',
+  'sir',
+  'bhai',
+  'ji',
+  'interested',
+  'info'
+]
 
 const DISINTEREST_TERMS = [
   'not interested', 'nahi chahiye', 'nahi lena', 'cancel', 'wrong number',
@@ -44,28 +68,28 @@ const DISINTEREST_TERMS = [
 const BUYING_TERMS = [
   'buy', 'kharidna', 'khareedna', 'book', 'booking', 'order', 'advance',
   'payment', 'token', 'account', 'deal', 'lena hai', 'chahiye', 'final',
-  'invoice', 'quotation confirm', 'kab bhejoge', 'dispatch'
+  'invoice', 'quotation confirm', 'kab bhejoge', 'dispatch', 'deal done'
 ]
 
 const PRICING_TERMS = [
   'price', 'rate', 'cost', 'quotation', 'quote', 'kitna', 'kitne',
   'bhav', 'rate list', 'price list', 'discount', 'subsidy', 'emi',
-  'karcha', 'kharcha', 'budget', 'down payment'
+  'karcha', 'kharcha', 'budget', 'down payment', 'kitne me'
 ]
 
-const MACHINE_TERMS = [
+const MACHINE_SPECIFIC_TERMS = [
   'agarbatti', 'incense', 'dhoop', 'dhoop stick', 'dhoop cone', 'raw material',
-  'bamboo stick', 'premix', 'automatic', 'manual', 'semi-automatic',
+  'bamboo stick', 'premix', 'automatic', 'semi-automatic', 'semi automatic',
   'packaging', 'packing', 'dryer', 'grinder', 'mixer', 'powder',
   'hydraulic', 'pouch', 'camphor', 'cotton wick', 'perfume', 'fragrance',
   'coating', 'feeder', 'churan', 'box packing', 'high speed', 'heavy duty',
-  'motor', 'piston', 'spare parts', 'machine'
+  'piston', 'spare parts', 'motor'
 ]
 
 const VISIT_TERMS = [
   'visit', 'demo', 'factory', 'office', 'kaha aana', 'address',
   'location', 'aana chahta', 'dekhna hai', 'trial', 'live demo',
-  'samne dekhna', 'kaha par hai', 'google map', 'pate par'
+  'samne dekhna', 'kaha par hai', 'google map', 'pate par', 'pune aana'
 ]
 
 const CALLBACK_TERMS = [
@@ -73,30 +97,32 @@ const CALLBACK_TERMS = [
   'call back', 'jaldi call', 'call kijiye', 'sampark'
 ]
 
+function isGenericTemplateOrGreeting(text: string): boolean {
+  const clean = text.trim().toLowerCase().replace(/[^\w\s\?]/g, '')
+  if (!clean || clean.length <= 3) return true
+  return GREETING_OR_TEMPLATE_PHRASES.some((phrase) => {
+    const cleanPhrase = phrase.replace(/[^\w\s\?]/g, '')
+    return clean === cleanPhrase || clean.startsWith(cleanPhrase)
+  })
+}
+
 export function calculateLeadScore(params: LeadScoreParams): LeadScoreOutput {
   const stage = (params.stage || 'new').toLowerCase().trim()
   const quality = (params.lead_quality || '').toLowerCase().trim()
-  const machineInterest = (params.machine_interest || '').trim()
+  const explicitMachine = (params.machine_interest || '').trim()
   const callbackReady = String(params.callback_ready || '').toLowerCase().trim() === 'yes'
   const messages = params.messages || []
 
-  // Split messages by direction
+  // Filter ONLY customer (incoming) messages for intent
   const incomingMsgs = messages.filter((m) => m.direction === 'incoming')
   const outgoingMsgs = messages.filter((m) => m.direction === 'outgoing')
 
-  // Extract texts
   const customerTexts = incomingMsgs.map((m) => (m.message || '').trim().toLowerCase())
   const fullCustomerText = customerTexts.join(' ')
-  const allMessagesText = (
-    messages.map((m) => m.message || '').join(' ') + ' ' +
-    machineInterest + ' ' +
-    (params.conversation_summary || '') + ' ' +
-    (params.intent || '')
-  ).toLowerCase()
 
   const factors: string[] = []
 
-  // Check for immediate disinterest or closed stages
+  // 1. Check for immediate disinterest or closed stages
   const isDisinterested =
     stage === 'not_interested' ||
     stage === 'cancelled' ||
@@ -112,7 +138,7 @@ export function calculateLeadScore(params: LeadScoreParams): LeadScoreOutput {
     }
   }
 
-  // 1. Stage Base Score
+  // 2. Base score from CRM Stage
   let score = 15 // Default base for fresh / new leads
   if (['hot_customer', 'confirmed', 'completed', 'booking'].includes(stage)) {
     score = 75
@@ -133,84 +159,74 @@ export function calculateLeadScore(params: LeadScoreParams): LeadScoreOutput {
     factors.push('Stage: new lead')
   }
 
-  // 2. Engagement & Responsiveness Scoring (Key fix for 1-message ghosted leads)
-  const incomingCount = incomingMsgs.length
-  const outgoingCount = outgoingMsgs.length
+  // 3. Customer Engagement & Reply Responsiveness
+  // Deduplicate identical sequential messages (common with Meta Ad double triggers)
+  const uniqueCustomerTexts = Array.from(new Set(customerTexts.filter(Boolean)))
+  const allCustomerMsgsAreGeneric = uniqueCustomerTexts.length <= 1 && uniqueCustomerTexts.every(isGenericTemplateOrGreeting)
 
-  if (incomingCount === 0) {
-    // Lead has not sent any message (only outbound campaign sent)
-    factors.push('No customer response yet')
-  } else if (incomingCount === 1) {
-    const firstMsg = customerTexts[0] || ''
-    const isOnlyGreeting = GREETING_WORDS.has(firstMsg) || (firstMsg.length <= 4 && !MACHINE_TERMS.some(m => firstMsg.includes(m)))
-
-    if (outgoingCount > 0 && isOnlyGreeting) {
-      // Sent 1 greeting, we replied, customer never answered back -> GHOSTED / COLD (15-20 pts total)
-      score += 5
-      factors.push('Single greeting message only (No follow-up reply)')
-    } else if (outgoingCount > 0 && !isOnlyGreeting) {
-      // Sent 1 specific question, we replied, no further reply yet
-      score += 12
-      factors.push('1 specific message sent')
-    } else {
-      // Just sent 1 message, fresh
-      score += 8
-      factors.push('Fresh 1st incoming message')
-    }
-  } else if (incomingCount === 2) {
-    // Two-way interaction confirmed (replied back to us)
+  if (incomingMsgs.length === 0) {
+    factors.push('No customer response yet (0 incoming)')
+  } else if (allCustomerMsgsAreGeneric) {
+    // Customer only clicked the ad or sent "Hi", agent replied, customer NEVER replied back
+    score += 5
+    factors.push('Initial ad inquiry / greeting only (No customer follow-up reply)')
+  } else if (uniqueCustomerTexts.length === 1) {
+    // 1 customer message, but contains specific custom text
+    score += 10
+    factors.push('1 specific customer message sent')
+  } else if (uniqueCustomerTexts.length === 2) {
+    // Real 2-way dialogue (customer replied after our message)
     score += 20
-    factors.push('Two-way conversation (2 customer replies)')
-  } else if (incomingCount === 3) {
+    factors.push('Two-way active dialogue (2 customer replies)')
+  } else if (uniqueCustomerTexts.length === 3) {
     score += 30
-    factors.push('Active dialogue (3 customer replies)')
+    factors.push('Engaged conversation (3 customer replies)')
   } else {
-    // 4 or more messages
+    // 4+ distinct customer responses
     score += 40
-    factors.push(`High conversational engagement (${incomingCount} replies)`)
+    factors.push(`Highly engaged conversation (${uniqueCustomerTexts.length} replies)`)
   }
 
-  // 3. High-Intent Content Signals
+  // 4. Intent Signals STRICTLY from Customer Messages or Explicit Lead Data
   // A. Buying / Booking Intent
-  const hasBuyingIntent = BUYING_TERMS.some((term) => allMessagesText.includes(term))
+  const hasBuyingIntent = BUYING_TERMS.some((term) => fullCustomerText.includes(term))
   if (hasBuyingIntent) {
     score += 20
-    factors.push('Purchase / Booking intent detected (+20)')
+    factors.push('Purchase / Booking intent from customer (+20)')
   }
 
-  // B. Machine & Product Specifics
-  const hasMachineInterest =
-    Boolean(machineInterest) ||
-    MACHINE_TERMS.some((term) => allMessagesText.includes(term)) ||
-    (params.products && params.products.length > 0)
+  // B. Specific Machine Mentions in customer text or explicit CRM field
+  const hasSpecificMachine =
+    Boolean(explicitMachine) ||
+    MACHINE_SPECIFIC_TERMS.some((term) => fullCustomerText.includes(term))
 
-  if (hasMachineInterest) {
+  if (hasSpecificMachine) {
     score += 15
-    factors.push('Specific machinery interest (+15)')
+    factors.push('Customer specified machinery model (+15)')
   }
 
-  // C. Pricing / Quotation Requests
-  const hasPricingIntent = PRICING_TERMS.some((term) => allMessagesText.includes(term))
+  // C. Pricing / Quotation Requests in customer text
+  const hasPricingIntent = PRICING_TERMS.some((term) => fullCustomerText.includes(term))
   if (hasPricingIntent) {
     score += 12
-    factors.push('Pricing / Quotation inquiry (+12)')
+    factors.push('Pricing / Quotation inquiry from customer (+12)')
   }
 
-  // D. Factory Visit / Live Demo
-  const hasVisitIntent = VISIT_TERMS.some((term) => allMessagesText.includes(term))
+  // D. Factory Visit / Live Demo Request in customer text
+  const hasVisitIntent = VISIT_TERMS.some((term) => fullCustomerText.includes(term))
   if (hasVisitIntent) {
     score += 15
     factors.push('Factory visit / Demo request (+15)')
   }
 
-  // E. Callback Request
-  const hasCallbackIntent = callbackReady || CALLBACK_TERMS.some((term) => allMessagesText.includes(term))
+  // E. Callback Request from customer
+  const hasCallbackIntent = callbackReady || CALLBACK_TERMS.some((term) => fullCustomerText.includes(term))
   if (hasCallbackIntent) {
     score += 12
-    factors.push('Requested callback / phone talk (+12)')
+    factors.push('Customer requested phone callback (+12)')
   }
 
-  // 4. Quality Modifiers
+  // 5. Quality Modifiers
   if (quality.includes('high') || quality.includes('hot')) {
     score += 10
     factors.push('High quality lead tag (+10)')
@@ -222,7 +238,7 @@ export function calculateLeadScore(params: LeadScoreParams): LeadScoreOutput {
     factors.push('Low quality tag (-15)')
   }
 
-  // 5. Special Stage Caps
+  // 6. Stage Caps
   if (stage === 'low_budget') {
     score = Math.min(score, 40)
   } else if (stage === 'not_connected') {
@@ -244,7 +260,7 @@ export function calculateLeadScore(params: LeadScoreParams): LeadScoreOutput {
   } else if (score < 45) {
     label = 'Cold / Fresh Lead'
     color = 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-    description = 'Cold / Fresh / Low Interaction'
+    description = 'Cold / Fresh / 1-Message Lead'
   }
 
   return {

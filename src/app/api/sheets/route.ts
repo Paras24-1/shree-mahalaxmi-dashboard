@@ -25,11 +25,27 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch messages to evaluate real engagement & customer intent
-    const { data: messages } = await supabaseAdmin
-      .from('messages')
-      .select('message, direction, timestamp')
-      .ilike('phone_number', `%${phone}`)
-      .order('timestamp', { ascending: true })
+    let messages: any[] = []
+    if (data.conversation_id) {
+      const { data: msgData } = await supabaseAdmin
+        .from('messages')
+        .select('message, direction, timestamp')
+        .eq('conversation_id', data.conversation_id)
+        .order('timestamp', { ascending: true })
+      if (msgData && msgData.length > 0) {
+        messages = msgData
+      }
+    }
+    if (messages.length === 0) {
+      const { data: msgData } = await supabaseAdmin
+        .from('messages')
+        .select('message, direction, timestamp')
+        .ilike('phone_number', `%${phone}%`)
+        .order('timestamp', { ascending: true })
+      if (msgData) {
+        messages = msgData
+      }
+    }
 
     const scoreResult = calculateLeadScore({
       stage: data.stage,

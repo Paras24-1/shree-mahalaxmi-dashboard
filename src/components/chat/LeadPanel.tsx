@@ -82,13 +82,13 @@ const parseTranscript = (transcriptText: string) => {
   return messages;
 };
 
-// Helper to compute realistic dynamic lead score if not explicitly set
+// Helper to compute realistic dynamic lead score
 const computeLeadScore = (
   data: any,
   conversation?: Conversation | null,
   summaryData?: any | null
 ): { score: number; label: string; color: string; description: string; factors: string[] } => {
-  // If summaryData already provides computed dynamic leadScore
+  // If summaryData already provides computed dynamic leadScore from actual customer messages
   if (summaryData?.leadScore?.score) {
     return summaryData.leadScore
   }
@@ -100,14 +100,14 @@ const computeLeadScore = (
     lead_quality: data?.lead_quality,
     machine_interest: data?.machine_interest,
     callback_ready: data?.callback_ready,
-    lead_score: explicit,
     conversation_summary: data?.conversation_summary || summaryData?.overview,
     intent: summaryData?.intent,
     sentiment: summaryData?.sentiment,
     products: summaryData?.products,
   })
 
-  if (!isNaN(explicit) && explicit > 0 && !summaryData?.intent) {
+  // If sheets API computed a dynamic score and returned it in data.lead_score (ignoring stale 50/52)
+  if (!isNaN(explicit) && explicit > 0 && explicit !== 50 && explicit !== 52) {
     result.score = explicit
     if (result.score >= 75) {
       result.label = 'Hot Lead'
@@ -116,7 +116,7 @@ const computeLeadScore = (
     } else if (result.score < 45) {
       result.label = 'Cold / Fresh Lead'
       result.color = 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-      result.description = 'Cold / Fresh / Low Interaction'
+      result.description = 'Cold / Fresh / 1-Message Lead'
     } else {
       result.label = 'Warm Lead'
       result.color = 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800'
