@@ -14,6 +14,13 @@ const VALID_LEAD_COLUMNS = new Set([
   'followup_notes',
   'followup_notified',
   'assigned_to',
+  'lead_score',
+  'lead_quality',
+  'lead_type',
+  'machine_interest',
+  'callback_ready',
+  'conversation_summary',
+  'metadata',
   'created_at',
   'updated_at',
 ])

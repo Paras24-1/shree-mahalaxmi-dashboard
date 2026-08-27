@@ -25,6 +25,7 @@ import {
   MessageSquare,
 } from 'lucide-react'
 import { getLeadColumn } from './LeadBoard'
+import { calculateLeadScore } from '@/lib/leadScoring'
 
 interface LeadCardProps {
   lead: any
@@ -134,6 +135,20 @@ function LeadCardComponent({
 
   const currentColumn = getLeadColumn(lead.stage, lead.created_at)
   const stageBadge = STAGE_CONFIG[currentColumn] || STAGE_CONFIG['new']
+
+  // Dynamic Lead Score
+  const leadScoreResult = calculateLeadScore({
+    stage: lead.stage,
+    lead_quality: lead.lead_quality,
+    machine_interest: lead.machine_interest,
+    callback_ready: lead.callback_ready,
+    lead_score: lead.lead_score,
+    conversation_summary: lead.conversation_summary,
+    messages: lead.last_message ? [{ message: lead.last_message, direction: 'incoming' }] : [],
+    intent: summaryData?.intent,
+    sentiment: summaryData?.sentiment,
+    products: summaryData?.products,
+  })
 
   const formattedDate = lead.created_at
     ? new Date(lead.created_at)
@@ -442,11 +457,20 @@ function LeadCardComponent({
           </button>
         </div>
 
-        {/* Source Badge & 1-Tap Quick Tag Bar */}
+        {/* Source Badge, Lead Score Badge & 1-Tap Quick Tag Bar */}
         <div className="flex items-center justify-between gap-2 flex-wrap mb-2.5">
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-[#ECEEFE] dark:bg-indigo-950/60 text-[#3D47B4] dark:text-indigo-300 border border-[#DCE2FE] dark:border-indigo-900/40">
-            {lead.source || 'WhatsApp Direct'}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-[#ECEEFE] dark:bg-indigo-950/60 text-[#3D47B4] dark:text-indigo-300 border border-[#DCE2FE] dark:border-indigo-900/40">
+              {lead.source || 'WhatsApp Direct'}
+            </span>
+
+            {/* Dynamic Lead Score Badge */}
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold border ${leadScoreResult.color}`}>
+              <TrendingUp className="w-3 h-3" />
+              <span>{leadScoreResult.score}/100</span>
+              <span className="opacity-80 text-[10px] font-medium hidden sm:inline">({leadScoreResult.label})</span>
+            </span>
+          </div>
 
           {/* Quick Tag Switcher Pills */}
           <div className="flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
@@ -587,6 +611,17 @@ function LeadCardComponent({
             <span className="text-gray-900 dark:text-gray-100 truncate capitalize">
               {lead.source || 'WhatsApp Direct'}
             </span>
+          </div>
+
+          <div className="grid grid-cols-[110px_12px_1fr] items-center">
+            <span className="text-gray-500 dark:text-gray-400">Lead Score</span>
+            <span className="text-gray-400">:</span>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-900 dark:text-gray-100 font-bold">{leadScoreResult.score}/100</span>
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${leadScoreResult.color}`}>
+                {leadScoreResult.label}
+              </span>
+            </div>
           </div>
         </div>
 

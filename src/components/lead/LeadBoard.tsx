@@ -178,7 +178,7 @@ export default function LeadBoard() {
           .limit(2000),
         supabase
           .from('conversations')
-          .select('id, name, phone_number, stage, assigned_to, notes, created_at, updated_at')
+          .select('id, name, phone_number, stage, assigned_to, notes, last_message, created_at, updated_at')
           .order('updated_at', { ascending: false })
           .limit(2000),
         supabase
@@ -212,6 +212,7 @@ export default function LeadBoard() {
             assigned_to: c.assigned_to,
             assigned_to_name: empName || (c.assigned_to && !c.assigned_to.includes('-') ? c.assigned_to : 'Priyanka Kamble'),
             notes: c.notes || null,
+            last_message: c.last_message || null,
             created_at: c.created_at || c.updated_at || new Date().toISOString(),
           })
         })
