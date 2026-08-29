@@ -41,3 +41,68 @@ export async function GET(request: Request) {
 
   return NextResponse.json(data || [])
 }
+
+// POST /api/call-transcripts: Ingest call transcript, status, and recording URL directly from webhooks/n8n
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const {
+      phone_number,
+      phoneNumber,
+      to_phone_number,
+      from_phone_number,
+      phone,
+      transcript,
+      recording_url,
+      recordingUrl,
+      duration_seconds,
+      duration,
+      status,
+      call_id,
+      id,
+    } = body
+
+    const targetPhone = phone_number || phoneNumber || to_phone_number || from_phone_number || phone
+    const recording = recording_url || recordingUrl || null
+    const callStatus = status || 'completed'
+    const dur = Number(duration_seconds || duration || 0)
+
+    if (!targetPhone) {
+      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
+    }
+
+    const cleanPhone = String(targetPhone).replace(/\D/g, '')
+    const canonicalPhone = cleanPhone.length === 10 ? `+91${cleanPhone}` : (cleanPhone.startsWith('91') && cleanPhone.length === 12 ? `+${cleanPhone}` : targetPhone)
+
+    const logData = {
+      ...(id || call_id ? { id: id || call_id } : {}),
+      to_phone_number: canonicalPhone,
+      from_phone_number: from_phone_number || 'Voice AI',
+      transcript: transcript || '',
+      recording_url: recording,
+      duration_seconds: dur,
+      status: callStatus,
+      created_at: new Date().toISOString(),
+    }
+
+    const { data, error } = await queryClient
+      .from('call_logs')
+      .upsert(logData)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('[Call Transcripts POST Error]:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Call transcript and recording logged successfully',
+      data,
+    })
+  } catch (err: any) {
+    console.error('[Call Transcripts POST Exception]:', err)
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })
+  }
+}

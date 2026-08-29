@@ -1118,6 +1118,14 @@ ${summaryData.keyPoints?.map((p: string) => `  - ${p}`).join('\n')}
                         <p className="text-xs text-gray-700 dark:text-gray-300 font-medium mt-0.5">
                           Duration: {minutes}m {seconds}s | Status: <span className="capitalize text-emerald-600 dark:text-emerald-400">{log.status}</span>
                         </p>
+                        {log.recording_url && (
+                          <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800">
+                            <p className="text-[10px] font-bold text-violet-600 dark:text-violet-400 mb-0.5 flex items-center gap-1">
+                              <span>🎵 Call Recording:</span>
+                            </p>
+                            <audio controls src={log.recording_url} className="w-full h-7 rounded-md outline-none" />
+                          </div>
+                        )}
                       </div>
                       <button
                         type="button"
