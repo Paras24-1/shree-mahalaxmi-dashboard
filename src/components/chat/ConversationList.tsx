@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, memo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import { Conversation, Stage } from '@/types'
 import { useConversations } from '@/hooks'
-import { Search, Filter, Wifi, Trash2, X, UserPlus, Circle, RefreshCw } from 'lucide-react'
+import { Search, Filter, Wifi, Trash2, X, UserPlus, Circle, RefreshCw, TrendingUp, SlidersHorizontal, Target } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { getLeadScore, getLeadScoreValue, LeadScoreOutput } from '@/lib/leadScoring'
 
 const STAGES: Stage[] = [
   'new',
@@ -51,6 +52,17 @@ interface Employee {
   email: string
 }
 
+export type ScoreFilterType =
+  | 'all'
+  | 'high_70'
+  | 'exact'
+  | 'min'
+  | 'max'
+  | 'range'
+  | 'hot'
+  | 'warm'
+  | 'cold'
+
 function formatSimpleTime(dateStr: string) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -77,6 +89,15 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [deleting, setDeleting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [leadsMetadata, setLeadsMetadata] = useState<Map<string, any>>(new Map())
+
+  // Lead Score Filter States
+  const [scoreFilterType, setScoreFilterType] = useState<ScoreFilterType>('all')
+  const [scoreTarget, setScoreTarget] = useState<string>('70')
+  const [scoreMin, setScoreMin] = useState<string>('50')
+  const [scoreMax, setScoreMax] = useState<string>('100')
+  const [showScoreModal, setShowScoreModal] = useState(false)
+
   const { profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
 
@@ -90,10 +111,40 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     userRole: profile?.role,
   })
 
+  // Fetch leads metadata for comprehensive dynamic lead scoring
+  const fetchLeadsMetadata = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('leads')
+        .select('id, conversation_id, phone_number, stage, lead_score, lead_quality, machine_interest, callback_ready, conversation_summary')
+        .limit(2000)
+
+      if (data) {
+        const map = new Map<string, any>()
+        data.forEach((l) => {
+          if (l.conversation_id) map.set(l.conversation_id, l)
+          if (l.id) map.set(l.id, l)
+          const cleanPhone = (l.phone_number || '').replace(/\D/g, '')
+          if (cleanPhone) {
+            map.set(cleanPhone, l)
+            if (cleanPhone.length >= 10) map.set(cleanPhone.slice(-10), l)
+          }
+        })
+        setLeadsMetadata(map)
+      }
+    } catch (err) {
+      console.error('Error fetching leads metadata:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchLeadsMetadata()
+  }, [fetchLeadsMetadata])
+
   const handleManualRefresh = async () => {
     setRefreshing(true)
     try {
-      await refetch()
+      await Promise.all([refetch(), fetchLeadsMetadata()])
     } finally {
       setTimeout(() => setRefreshing(false), 500)
     }
@@ -118,11 +169,85 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     return map
   }, [employees])
 
+  // Pre-calculated Lead Scores map for instant filtering & rendering
+  const leadScoresMap = useMemo(() => {
+    const map = new Map<string, LeadScoreOutput>()
+    conversations.forEach((conv) => {
+      const cleanPhone = (conv.phone_number || '').replace(/\D/g, '')
+      const leadMeta =
+        leadsMetadata.get(conv.id) ||
+        (cleanPhone ? leadsMetadata.get(cleanPhone) || leadsMetadata.get(cleanPhone.slice(-10)) : null)
+
+      const mergedLead = {
+        ...conv,
+        ...leadMeta,
+        stage: conv.stage || leadMeta?.stage || 'new',
+        last_message: conv.last_message,
+      }
+      map.set(conv.id, getLeadScore(mergedLead))
+    })
+    return map
+  }, [conversations, leadsMetadata])
+
   const sortedConversations = useMemo(() => {
-    return [...conversations].sort(
+    const q = search.toLowerCase().trim()
+
+    const list = conversations.filter((conv) => {
+      const scoreObj = leadScoresMap.get(conv.id)
+      const score = scoreObj ? scoreObj.score : getLeadScoreValue(conv)
+
+      // 1. Score filter
+      if (scoreFilterType === 'high_70' && score < 70) return false
+      if (scoreFilterType === 'hot' && score < 75) return false
+      if (scoreFilterType === 'warm' && (score < 45 || score >= 75)) return false
+      if (scoreFilterType === 'cold' && score >= 45) return false
+      if (scoreFilterType === 'exact') {
+        const target = Number(scoreTarget || 70)
+        if (!isNaN(target) && score !== target) return false
+      }
+      if (scoreFilterType === 'min') {
+        const target = Number(scoreTarget || 70)
+        if (!isNaN(target) && score < target) return false
+      }
+      if (scoreFilterType === 'max') {
+        const target = Number(scoreTarget || 70)
+        if (!isNaN(target) && score > target) return false
+      }
+      if (scoreFilterType === 'range') {
+        const minVal = Number(scoreMin || 0)
+        const maxVal = Number(scoreMax || 100)
+        if (score < minVal || score > maxVal) return false
+      }
+
+      // 2. Search box score syntax match (e.g. "score: 70", "70", ">=70", "=70")
+      if (q) {
+        const scoreSyntaxMatch = q.match(/^(?:score\s*[:=]?\s*|\s*)(>=|<=|>|<|=)?\s*(\d{1,3})$/i)
+        if (scoreSyntaxMatch && !isNaN(Number(scoreSyntaxMatch[2]))) {
+          const op = scoreSyntaxMatch[1] || '='
+          const targetNum = Number(scoreSyntaxMatch[2])
+          let matchesSyntax = false
+          if (op === '=' || !scoreSyntaxMatch[1]) {
+            if (score === targetNum) matchesSyntax = true
+          } else if (op === '>=') {
+            if (score >= targetNum) matchesSyntax = true
+          } else if (op === '>') {
+            if (score > targetNum) matchesSyntax = true
+          } else if (op === '<=') {
+            if (score <= targetNum) matchesSyntax = true
+          } else if (op === '<') {
+            if (score < targetNum) matchesSyntax = true
+          }
+          if (matchesSyntax) return true
+        }
+      }
+
+      return true
+    })
+
+    return list.sort(
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     )
-  }, [conversations])
+  }, [conversations, leadScoresMap, scoreFilterType, scoreTarget, scoreMin, scoreMax, search])
 
   // Auto-select first conversation on laptop / Chromebook / desktop
   useEffect(() => {
@@ -152,7 +277,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   }
 
   return (
-    <aside className="flex flex-col h-full bg-white dark:bg-gray-950">
+    <aside className="flex flex-col h-full bg-white dark:bg-gray-950 relative">
       {/* Confirm Delete Modal */}
       {confirmId && (
         <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -185,6 +310,131 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
         </div>
       )}
 
+      {/* Custom Lead Score Filter Modal */}
+      {showScoreModal && (
+        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-xs shadow-2xl border border-gray-200 dark:border-gray-800 space-y-3.5 text-xs text-gray-800 dark:text-gray-200">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2.5">
+              <div className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-white">
+                <TrendingUp className="w-4 h-4 text-purple-600" />
+                <span>Lead Score Filter</span>
+              </div>
+              <button onClick={() => setShowScoreModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                Filter Mode
+              </label>
+              <select
+                value={scoreFilterType === 'all' ? 'high_70' : scoreFilterType}
+                onChange={(e) => setScoreFilterType(e.target.value as ScoreFilterType)}
+                className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 font-bold text-xs outline-none"
+              >
+                <option value="high_70">🔥 High Score (≥ 70)</option>
+                <option value="exact">🎯 Exact Score (=)</option>
+                <option value="min">📈 Minimum Score (≥)</option>
+                <option value="max">📉 Maximum Score (≤)</option>
+                <option value="range">📊 Score Range (Min - Max)</option>
+                <option value="hot">🟢 Hot Leads (≥ 75)</option>
+                <option value="warm">🟡 Warm Leads (45 - 74)</option>
+                <option value="cold">⚪ Cold Leads (&lt; 45)</option>
+              </select>
+            </div>
+
+            {['exact', 'min', 'max'].includes(scoreFilterType) && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-semibold">
+                  <span>Target Score:</span>
+                  <span className="text-purple-600 font-extrabold">{scoreTarget || 70}/100</span>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={scoreTarget}
+                  onChange={(e) => setScoreTarget(e.target.value)}
+                  placeholder="e.g. 70"
+                  className="w-full p-2 border border-purple-200 dark:border-purple-800 rounded-xl bg-white dark:bg-gray-950 font-bold text-xs outline-none focus:ring-2 focus:ring-purple-600"
+                />
+                <div className="flex items-center gap-1 pt-0.5 flex-wrap">
+                  <span className="text-[10px] text-gray-400 font-semibold">Quick:</span>
+                  {['30', '50', '60', '70', '80', '90'].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setScoreTarget(num)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-colors ${
+                        scoreTarget === num
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-purple-50'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {scoreFilterType === 'range' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-semibold">
+                  <span>Score Range:</span>
+                  <span className="text-purple-600 font-extrabold">{scoreMin || 0} to {scoreMax || 100}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-semibold block mb-0.5">Min</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={scoreMin}
+                      onChange={(e) => setScoreMin(e.target.value)}
+                      className="w-full p-1.5 border border-purple-200 dark:border-purple-800 rounded-lg bg-white dark:bg-gray-950 font-bold text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-semibold block mb-0.5">Max</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={scoreMax}
+                      onChange={(e) => setScoreMax(e.target.value)}
+                      className="w-full p-1.5 border border-purple-200 dark:border-purple-800 rounded-lg bg-white dark:bg-gray-950 font-bold text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setScoreFilterType('all')
+                  setShowScoreModal(false)
+                }}
+                className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 font-semibold"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowScoreModal(false)}
+                className="flex-1 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-2xs transition-colors"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
         <div className="flex items-center justify-between mb-2.5">
@@ -210,11 +460,19 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
           <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search name or number..."
+            placeholder="Search name, phone, or score (e.g. 70, score>=70)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
           />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -223,7 +481,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
             <select
               value={assignedFilter}
               onChange={(e) => setAssignedFilter(e.target.value)}
-              className="text-[11px] px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+              className="text-[11px] px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none font-medium"
             >
               <option value="all">All</option>
               <option value="unassigned">Unassigned</option>
@@ -239,7 +497,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
           <select
             value={stage}
             onChange={(e) => setStage(e.target.value)}
-            className="text-[11px] px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+            className="text-[11px] px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none font-medium"
           >
             <option value="">All Stages</option>
             {STAGES.map((s) => (
@@ -249,17 +507,92 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
             ))}
           </select>
 
+          {/* Lead Score Quick Filter Dropdown */}
+          <select
+            value={
+              scoreFilterType === 'exact' && scoreTarget === '70'
+                ? 'exact_70'
+                : scoreFilterType === 'high_70'
+                ? 'high_70'
+                : scoreFilterType
+            }
+            onChange={(e) => {
+              const val = e.target.value
+              if (val === 'exact_70') {
+                setScoreFilterType('exact')
+                setScoreTarget('70')
+              } else if (val === 'high_70') {
+                setScoreFilterType('high_70')
+                setScoreTarget('70')
+              } else if (val === 'custom_modal') {
+                setShowScoreModal(true)
+              } else {
+                setScoreFilterType(val as ScoreFilterType)
+              }
+            }}
+            className={`text-[11px] px-2 py-1 rounded-lg focus:outline-none transition-colors font-semibold ${
+              scoreFilterType !== 'all'
+                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 ring-1 ring-purple-500'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+            }`}
+            title="Filter by Lead Score"
+          >
+            <option value="all">🎯 Score: All</option>
+            <option value="high_70">🔥 Score: 70+</option>
+            <option value="exact_70">🎯 Score: Exact 70</option>
+            <option value="hot">🟢 Hot (≥ 75)</option>
+            <option value="warm">🟡 Warm (45-74)</option>
+            <option value="cold">⚪ Cold (&lt; 45)</option>
+            <option value="custom_modal">⚙️ Custom Score...</option>
+          </select>
+
           <button
             onClick={() => setUnread((u) => !u)}
-            className={`text-[11px] px-2 py-0.5 rounded-lg transition-colors font-medium ${
+            className={`text-[11px] px-2 py-1 rounded-lg transition-colors font-medium ${
               unread
-                ? 'bg-emerald-500 text-white'
+                ? 'bg-emerald-500 text-white font-bold'
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
             }`}
           >
             Unread
           </button>
         </div>
+
+        {/* Active Score Filter Chip */}
+        {scoreFilterType !== 'all' && (
+          <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-800">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-md text-[10px] font-bold">
+              <TrendingUp className="w-2.5 h-2.5 text-purple-600" />
+              <span>
+                Score:{' '}
+                {scoreFilterType === 'high_70'
+                  ? '≥ 70'
+                  : scoreFilterType === 'hot'
+                  ? 'Hot (≥ 75)'
+                  : scoreFilterType === 'warm'
+                  ? 'Warm (45-74)'
+                  : scoreFilterType === 'cold'
+                  ? 'Cold (< 45)'
+                  : scoreFilterType === 'exact'
+                  ? `= ${scoreTarget || 70}`
+                  : scoreFilterType === 'min'
+                  ? `≥ ${scoreTarget || 70}`
+                  : scoreFilterType === 'max'
+                  ? `≤ ${scoreTarget || 70}`
+                  : scoreFilterType === 'range'
+                  ? `${scoreMin || 0} - ${scoreMax || 100}`
+                  : ''}
+              </span>
+              <button
+                onClick={() => setScoreFilterType('all')}
+                className="hover:text-purple-900 dark:hover:text-white p-0.5 rounded transition-colors"
+                title="Clear score filter"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -277,8 +610,22 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
             ))}
           </div>
         ) : sortedConversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-xs">
-            <span>No conversations found</span>
+          <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-xs text-center px-4">
+            <Filter className="w-5 h-5 mb-1 opacity-40 text-purple-500" />
+            <span>No conversations matching filters</span>
+            {(scoreFilterType !== 'all' || stage || search || unread) && (
+              <button
+                onClick={() => {
+                  setScoreFilterType('all')
+                  setStage('')
+                  setSearch('')
+                  setUnread(false)
+                }}
+                className="mt-1 text-[11px] text-purple-600 font-bold hover:underline"
+              >
+                Reset filters
+              </button>
+            )}
           </div>
         ) : (
           sortedConversations.map((conv) => (
@@ -290,6 +637,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
               onDelete={(e) => handleDelete(e, conv.id)}
               isAdmin={!!isAdmin}
               assignedEmployee={conv.assigned_to ? employeeMap.get(conv.assigned_to) : undefined}
+              leadScore={leadScoresMap.get(conv.id) || getLeadScore(conv)}
               onAssignmentChange={refetch}
             />
           ))
@@ -306,6 +654,7 @@ const ConversationItem = memo(function ConversationItem({
   onDelete,
   isAdmin,
   assignedEmployee,
+  leadScore,
 }: {
   conversation: Conversation
   isSelected: boolean
@@ -313,14 +662,15 @@ const ConversationItem = memo(function ConversationItem({
   onDelete: (e: React.MouseEvent) => void
   isAdmin: boolean
   assignedEmployee?: Employee
+  leadScore: LeadScoreOutput
   onAssignmentChange: () => void
 }) {
   const initials = (conv.name || conv.phone_number || 'U')
-  .split(' ')
-  .map((n) => n[0])
-  .join('')
-  .toUpperCase()
-  .slice(0, 2)
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
 
   const timeAgo = formatSimpleTime(conv.updated_at)
 
@@ -361,12 +711,28 @@ const ConversationItem = memo(function ConversationItem({
         </p>
 
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Stage Badge */}
           <span
             className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tight ${
               STAGE_COLORS[conv.stage as Stage] || STAGE_COLORS.new
             }`}
           >
             {conv.stage.replace(/_/g, ' ')}
+          </span>
+
+          {/* Dynamic Lead Score Badge */}
+          <span
+            className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 border ${
+              leadScore.score >= 75
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                : leadScore.score >= 45
+                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
+            }`}
+            title={`Lead Score: ${leadScore.score}/100 (${leadScore.label})`}
+          >
+            <TrendingUp className="w-2.5 h-2.5 shrink-0" />
+            <span>{leadScore.score}</span>
           </span>
 
           {assignedEmployee && (
