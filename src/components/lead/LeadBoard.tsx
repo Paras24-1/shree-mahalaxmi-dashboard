@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import LeadCard from './LeadCard'
@@ -162,35 +162,99 @@ function matchesScoreFilter(
 
 const SOURCES = ['All', 'India Mart', 'Face Book', 'Google Ads', 'WhatsApp CRM', 'Referral']
 
+// ============================================================
+// Singleton In-Memory State & Scroll Cache
+// Preserves leads, filters, rendered count, and exact scroll position
+// across navigation to chat and back without reloading or jumping
+// ============================================================
+interface LeadsMemoryStore {
+  leads: any[]
+  employees: any[]
+  employeeMap: Map<string, string>
+  searchQuery: string
+  activeStageTab: string
+  dateFilter: DateFilterType
+  customStartDate: string
+  customEndDate: string
+  sourceFilter: string
+  scoreFilterType: ScoreFilterType
+  scoreTarget: string
+  scoreMin: string
+  scoreMax: string
+  renderLimit: number
+  scrollTop: number
+  lastOpenedLeadId: string | null
+  lastFetchedAt: number
+}
+
+let leadsMemoryStore: LeadsMemoryStore | null = null
+
+function getInitialLeadsState() {
+  if (leadsMemoryStore && leadsMemoryStore.leads.length > 0) {
+    return leadsMemoryStore
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const savedJson = sessionStorage.getItem('shree_leads_state_cache')
+      if (savedJson) {
+        const parsed = JSON.parse(savedJson)
+        if (parsed && Array.isArray(parsed.leads) && parsed.leads.length > 0) {
+          const empMap = new Map<string, string>()
+          if (Array.isArray(parsed.employees)) {
+            parsed.employees.forEach((u: any) => {
+              if (u.id) empMap.set(u.id, u.name || u.email || 'Team Member')
+            })
+          }
+          leadsMemoryStore = {
+            ...parsed,
+            employeeMap: empMap,
+            scrollTop: Number(sessionStorage.getItem('shree_leads_scroll_top') || parsed.scrollTop || 0),
+            lastOpenedLeadId: sessionStorage.getItem('shree_leads_last_lead_id') || parsed.lastOpenedLeadId || null,
+            lastFetchedAt: parsed.lastFetchedAt || Date.now(),
+          }
+          return leadsMemoryStore
+        }
+      }
+    } catch {}
+  }
+  return null
+}
+
 export default function LeadBoard() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const paramFilter = searchParams?.get('filter')
 
-  const [leads, setLeads] = useState<any[]>([])
-  const [employees, setEmployees] = useState<any[]>([])
-  const [employeeMap, setEmployeeMap] = useState<Map<string, string>>(new Map())
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeStageTab, setActiveStageTab] = useState<string>('all')
-  const [dateFilter, setDateFilter] = useState<DateFilterType>(
-    paramFilter === 'today' ? 'today' : paramFilter === 'yesterday' ? 'yesterday' : 'all'
-  )
-  const [customStartDate, setCustomStartDate] = useState('')
-  const [customEndDate, setCustomEndDate] = useState('')
-  const [sourceFilter, setSourceFilter] = useState('All')
+  const initialCache = getInitialLeadsState()
+
+  const [leads, setLeads] = useState<any[]>(() => initialCache?.leads || [])
+  const [employees, setEmployees] = useState<any[]>(() => initialCache?.employees || [])
+  const [employeeMap, setEmployeeMap] = useState<Map<string, string>>(() => initialCache?.employeeMap || new Map())
+  const [loading, setLoading] = useState<boolean>(() => !initialCache || initialCache.leads.length === 0)
+  const [searchQuery, setSearchQuery] = useState<string>(() => initialCache?.searchQuery || '')
+  const [activeStageTab, setActiveStageTab] = useState<string>(() => initialCache?.activeStageTab || 'all')
+  const [dateFilter, setDateFilter] = useState<DateFilterType>(() => {
+    if (paramFilter === 'today') return 'today'
+    if (paramFilter === 'yesterday') return 'yesterday'
+    return initialCache?.dateFilter || 'all'
+  })
+  const [customStartDate, setCustomStartDate] = useState<string>(() => initialCache?.customStartDate || '')
+  const [customEndDate, setCustomEndDate] = useState<string>(() => initialCache?.customEndDate || '')
+  const [sourceFilter, setSourceFilter] = useState<string>(() => initialCache?.sourceFilter || 'All')
 
   // Lead Score Filter State
-  const [scoreFilterType, setScoreFilterType] = useState<ScoreFilterType>('all')
-  const [scoreTarget, setScoreTarget] = useState<string>('70')
-  const [scoreMin, setScoreMin] = useState<string>('50')
-  const [scoreMax, setScoreMax] = useState<string>('100')
+  const [scoreFilterType, setScoreFilterType] = useState<ScoreFilterType>(() => initialCache?.scoreFilterType || 'all')
+  const [scoreTarget, setScoreTarget] = useState<string>(() => initialCache?.scoreTarget || '70')
+  const [scoreMin, setScoreMin] = useState<string>(() => initialCache?.scoreMin || '50')
+  const [scoreMax, setScoreMax] = useState<string>(() => initialCache?.scoreMax || '100')
 
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'card_list' | 'kanban'>('card_list')
 
-  // Pagination / Chunk Rendering for fast scroll
-  const [renderLimit, setRenderLimit] = useState(40)
+  // Pagination / Chunk Rendering for fast scroll - ensure it can render all previously visible leads immediately
+  const [renderLimit, setRenderLimit] = useState<number>(() => Math.max(40, initialCache?.renderLimit || 40))
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Modals & Menus
   const [showFilterMenu, setShowFilterMenu] = useState(false)
@@ -222,9 +286,73 @@ export default function LeadBoard() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Keep memory store synced when filters or search query changes
+  useEffect(() => {
+    if (leadsMemoryStore) {
+      leadsMemoryStore.searchQuery = searchQuery
+      leadsMemoryStore.activeStageTab = activeStageTab
+      leadsMemoryStore.dateFilter = dateFilter
+      leadsMemoryStore.customStartDate = customStartDate
+      leadsMemoryStore.customEndDate = customEndDate
+      leadsMemoryStore.sourceFilter = sourceFilter
+      leadsMemoryStore.scoreFilterType = scoreFilterType
+      leadsMemoryStore.scoreTarget = scoreTarget
+      leadsMemoryStore.scoreMin = scoreMin
+      leadsMemoryStore.scoreMax = scoreMax
+      leadsMemoryStore.renderLimit = renderLimit
+    }
+  }, [
+    searchQuery,
+    activeStageTab,
+    dateFilter,
+    customStartDate,
+    customEndDate,
+    sourceFilter,
+    scoreFilterType,
+    scoreTarget,
+    scoreMin,
+    scoreMax,
+    renderLimit,
+  ])
+
+  // Track scroll position seamlessly
+  const handleScroll = useCallback(() => {
+    if (scrollContainerRef.current) {
+      const top = scrollContainerRef.current.scrollTop
+      if (leadsMemoryStore) {
+        leadsMemoryStore.scrollTop = top
+      }
+      try {
+        sessionStorage.setItem('shree_leads_scroll_top', String(top))
+      } catch {}
+    }
+  }, [])
+
+  // Save scroll and lead id right before navigation to chat or external screen
+  const handleBeforeNavigate = useCallback(
+    (leadId: string) => {
+      const top = scrollContainerRef.current?.scrollTop ?? (leadsMemoryStore?.scrollTop || 0)
+      if (leadsMemoryStore) {
+        leadsMemoryStore.scrollTop = top
+        leadsMemoryStore.lastOpenedLeadId = leadId
+        leadsMemoryStore.renderLimit = renderLimit
+      }
+      try {
+        sessionStorage.setItem('shree_leads_scroll_top', String(top))
+        sessionStorage.setItem('shree_leads_last_lead_id', leadId)
+        sessionStorage.setItem('shree_leads_render_limit', String(renderLimit))
+      } catch {}
+    },
+    [renderLimit]
+  )
+
   // Unified Lead Loader: Combines leads table + conversations table + employee names
-  const fetchLeads = async () => {
-    setLoading(true)
+  const fetchLeads = async (isExplicitRefresh = false) => {
+    // Only show full loading spinner if we have NO leads in cache or user explicitly refreshed
+    if (isExplicitRefresh || leads.length === 0) {
+      setLoading(true)
+    }
+
     try {
       const [leadsRes, convsRes, usersRes] = await Promise.all([
         supabase
@@ -306,6 +434,47 @@ export default function LeadBoard() {
       )
 
       setLeads(mergedLeads)
+
+      // Update singleton cache
+      leadsMemoryStore = {
+        leads: mergedLeads,
+        employees: usersRes.data || [],
+        employeeMap: empMap,
+        searchQuery,
+        activeStageTab,
+        dateFilter,
+        customStartDate,
+        customEndDate,
+        sourceFilter,
+        scoreFilterType,
+        scoreTarget,
+        scoreMin,
+        scoreMax,
+        renderLimit,
+        scrollTop: leadsMemoryStore?.scrollTop || 0,
+        lastOpenedLeadId: leadsMemoryStore?.lastOpenedLeadId || null,
+        lastFetchedAt: Date.now(),
+      }
+
+      // Save serialized cache in sessionStorage
+      try {
+        sessionStorage.setItem(
+          'shree_leads_state_cache',
+          JSON.stringify({
+            leads: mergedLeads.slice(0, 500),
+            employees: usersRes.data || [],
+            searchQuery,
+            activeStageTab,
+            dateFilter,
+            sourceFilter,
+            scoreFilterType,
+            scoreTarget,
+            scoreMin,
+            scoreMax,
+            renderLimit,
+          })
+        )
+      } catch {}
     } catch (err) {
       console.error('Error fetching unified leads:', err)
     } finally {
@@ -314,7 +483,8 @@ export default function LeadBoard() {
   }
 
   useEffect(() => {
-    fetchLeads()
+    // If not cached, fetch immediately. If already cached, fetch quietly in background
+    fetchLeads(false)
 
     // Real-time subscription to leads & conversations
     const leadChannel = supabase
@@ -322,12 +492,12 @@ export default function LeadBoard() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
-        () => fetchLeads()
+        () => fetchLeads(false)
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'conversations' },
-        () => fetchLeads()
+        () => fetchLeads(false)
       )
       .subscribe()
 
@@ -603,8 +773,14 @@ export default function LeadBoard() {
     { id: 'cancel', label: 'Cancel', count: stageCounts.cancel, dotColor: 'bg-rose-500', amount: '0.0' },
   ]
 
-  // Reset render limit when tab or filter changes
+  const isInitialMount = useRef(true)
+
+  // Reset render limit when tab or filter changes (skip on initial mount to preserve scroll)
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
     setRenderLimit(40)
   }, [activeStageTab, searchQuery, dateFilter, sourceFilter, scoreFilterType, scoreTarget, scoreMin, scoreMax])
 
@@ -613,10 +789,73 @@ export default function LeadBoard() {
     return filteredLeads.slice(0, renderLimit)
   }, [filteredLeads, renderLimit])
 
+  // Seamless, non-flickering scroll restoration
+  useLayoutEffect(() => {
+    if (loading) return
+
+    const savedTop =
+      leadsMemoryStore?.scrollTop ??
+      Number(typeof window !== 'undefined' ? sessionStorage.getItem('shree_leads_scroll_top') || 0 : 0)
+    const targetLeadId =
+      leadsMemoryStore?.lastOpenedLeadId ||
+      (typeof window !== 'undefined' ? sessionStorage.getItem('shree_leads_last_lead_id') : null)
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    if (savedTop > 0 || targetLeadId) {
+      // 1. Direct synchronous layout restore before browser paint
+      if (savedTop > 0) {
+        container.scrollTop = savedTop
+      }
+
+      // 2. Fallback RAF to handle dynamic font/image layout stabilization
+      const raf1 = requestAnimationFrame(() => {
+        const raf2 = requestAnimationFrame(() => {
+          if (container && savedTop > 0 && Math.abs(container.scrollTop - savedTop) > 5) {
+            container.scrollTop = savedTop
+          }
+
+          if (targetLeadId) {
+            const el = document.getElementById(`lead-card-${targetLeadId}`)
+            if (el) {
+              const rect = el.getBoundingClientRect()
+              const containerRect = container.getBoundingClientRect()
+              if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) {
+                el.scrollIntoView({ block: 'nearest', behavior: 'instant' as any })
+              }
+            }
+          }
+        })
+        return () => cancelAnimationFrame(raf2)
+      })
+
+      return () => cancelAnimationFrame(raf1)
+    }
+  }, [loading, visibleLeads.length])
+
   const activeFilterCount =
     (sourceFilter !== 'All' ? 1 : 0) +
     (dateFilter !== 'all' ? 1 : 0) +
     (scoreFilterType !== 'all' ? 1 : 0)
+
+  const handleTabChange = (tabId: string) => {
+    setActiveStageTab(tabId)
+    setRenderLimit(40)
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0
+    }
+    if (leadsMemoryStore) {
+      leadsMemoryStore.scrollTop = 0
+      leadsMemoryStore.lastOpenedLeadId = null
+      leadsMemoryStore.activeStageTab = tabId
+      leadsMemoryStore.renderLimit = 40
+    }
+    try {
+      sessionStorage.setItem('shree_leads_scroll_top', '0')
+      sessionStorage.removeItem('shree_leads_last_lead_id')
+    } catch {}
+  }
 
   const handleResetFilters = () => {
     setSourceFilter('All')
@@ -627,6 +866,19 @@ export default function LeadBoard() {
     setScoreTarget('70')
     setScoreMin('50')
     setScoreMax('100')
+    setRenderLimit(40)
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0
+    }
+    if (leadsMemoryStore) {
+      leadsMemoryStore.scrollTop = 0
+      leadsMemoryStore.lastOpenedLeadId = null
+      leadsMemoryStore.renderLimit = 40
+    }
+    try {
+      sessionStorage.setItem('shree_leads_scroll_top', '0')
+      sessionStorage.removeItem('shree_leads_last_lead_id')
+    } catch {}
   }
 
   if (loading && leads.length === 0) {
@@ -895,7 +1147,7 @@ export default function LeadBoard() {
               <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl py-1.5 z-50 text-xs text-gray-800 dark:text-gray-200">
                 <button
                   onClick={() => {
-                    fetchLeads()
+                    fetchLeads(true)
                     setShowMoreMenu(false)
                   }}
                   className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
@@ -1093,7 +1345,7 @@ export default function LeadBoard() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveStageTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`
                 flex flex-col items-start px-3.5 py-2 rounded-xl border transition-all shrink-0 min-w-[105px]
                 ${
@@ -1120,18 +1372,17 @@ export default function LeadBoard() {
 
       {/* 4. Leads Cards View (Default) vs Kanban Board */}
       {viewMode === 'card_list' ? (
-        <div className="flex-1 overflow-y-auto space-y-3 pb-12 pr-0.5">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto space-y-3 pb-12 pr-0.5"
+        >
           {filteredLeads.length === 0 ? (
             <div className="py-20 text-center text-gray-400">
               <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p className="text-sm font-semibold">No leads found in this stage</p>
               <button
-                onClick={() => {
-                  setActiveStageTab('all')
-                  setSearchQuery('')
-                  setDateFilter('all')
-                  setSourceFilter('All')
-                }}
+                onClick={handleResetFilters}
                 className="mt-2 text-xs text-purple-600 font-bold hover:underline"
               >
                 Clear all filters
@@ -1149,6 +1400,7 @@ export default function LeadBoard() {
                   onDelete={handleDelete}
                   onStageChange={handleStageChange}
                   onUpdateLead={handleUpdateLead}
+                  onBeforeNavigate={handleBeforeNavigate}
                 />
               ))}
 
@@ -1191,6 +1443,7 @@ export default function LeadBoard() {
                     onDelete={handleDelete}
                     onStageChange={handleStageChange}
                     onUpdateLead={handleUpdateLead}
+                    onBeforeNavigate={handleBeforeNavigate}
                   />
                 ))}
               </LeadColumn>

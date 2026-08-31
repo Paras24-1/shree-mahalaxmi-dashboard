@@ -35,6 +35,7 @@ interface LeadCardProps {
   onDelete?: (id: string) => void
   onStageChange?: (id: string, newStage: string) => void
   onUpdateLead?: (leadId: string, updates: Partial<any>) => void
+  onBeforeNavigate?: (id: string) => void
 }
 
 const STAGE_CONFIG: Record<
@@ -94,6 +95,7 @@ function LeadCardComponent({
   onDelete,
   onStageChange,
   onUpdateLead,
+  onBeforeNavigate,
 }: LeadCardProps) {
   const router = useRouter()
 
@@ -177,6 +179,7 @@ function LeadCardComponent({
     if (e) e.stopPropagation()
     const targetId = lead.conversation_id || lead.id || ''
     const phone = lead.phone_number ? encodeURIComponent(lead.phone_number) : ''
+    onBeforeNavigate?.(lead.id || lead.conversation_id)
     router.push(`/chat?conversation_id=${targetId}&phone=${phone}`)
   }
 
@@ -340,6 +343,7 @@ function LeadCardComponent({
 
   return (
     <div
+      id={`lead-card-${lead.id || lead.conversation_id}`}
       onClick={handleOpenChat}
       className={`
         relative bg-white dark:bg-gray-900 border rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer mb-3.5 overflow-hidden select-none group
