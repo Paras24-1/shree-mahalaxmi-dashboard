@@ -55,17 +55,7 @@ export function getLeadColumn(stage: string | undefined | null, createdAt?: stri
     return 'processing'
   }
 
-  if (s === 'new' || !stage) {
-    if (createdAt) {
-      const createdTime = new Date(createdAt).getTime()
-      if (!isNaN(createdTime)) {
-        const ageHours = (Date.now() - createdTime) / (1000 * 60 * 60)
-        if (ageHours <= 24) {
-          return 'new'
-        }
-        return 'processing'
-      }
-    }
+  if (s === 'new') {
     return 'new'
   }
 
@@ -381,11 +371,19 @@ export default function LeadBoard() {
       }
 
       const leadMap = new Map<string, any>()
+      const phoneToConvId = new Map<string, string>()
 
       // 1. Load all conversations as base leads
       if (convsRes.data) {
         convsRes.data.forEach((c) => {
           const empName = c.assigned_to ? empMap.get(c.assigned_to) : null
+          const cleanPhone = (c.phone_number || '').replace(/\D/g, '')
+          if (cleanPhone) {
+            phoneToConvId.set(cleanPhone, c.id)
+            if (cleanPhone.length >= 10) {
+              phoneToConvId.set(cleanPhone.slice(-10), c.id)
+            }
+          }
           leadMap.set(c.id, {
             id: c.id,
             conversation_id: c.id,
@@ -398,6 +396,7 @@ export default function LeadBoard() {
             notes: c.notes || null,
             last_message: c.last_message || null,
             created_at: c.created_at || c.updated_at || new Date().toISOString(),
+            updated_at: c.updated_at || c.created_at || new Date().toISOString(),
           })
         })
       }
@@ -405,9 +404,27 @@ export default function LeadBoard() {
       // 2. Merge with leads table records for rich metadata (company, notes, specific source, etc.)
       if (leadsRes.data) {
         leadsRes.data.forEach((l) => {
-          const key = l.conversation_id || l.id
+          const cleanPhone = (l.phone_number || '').replace(/\D/g, '')
+          const matchedConvIdByPhone = cleanPhone
+            ? phoneToConvId.get(cleanPhone) || phoneToConvId.get(cleanPhone.slice(-10))
+            : null
+          const key = l.conversation_id || matchedConvIdByPhone || l.id
           const existing = leadMap.get(key)
           const empName = l.assigned_to ? empMap.get(l.assigned_to) : null
+
+          // Resolve stage: prefer explicit assigned stage over 'new'
+          let resolvedStage = 'new'
+          if (l.stage && l.stage !== 'new' && existing?.stage && existing.stage !== 'new') {
+            const existingTime = new Date(existing.updated_at || existing.created_at || 0).getTime()
+            const lTime = new Date(l.updated_at || l.created_at || 0).getTime()
+            resolvedStage = lTime >= existingTime ? l.stage : existing.stage
+          } else if (l.stage && l.stage !== 'new') {
+            resolvedStage = l.stage
+          } else if (existing?.stage && existing.stage !== 'new') {
+            resolvedStage = existing.stage
+          } else {
+            resolvedStage = l.stage || existing?.stage || 'new'
+          }
 
           leadMap.set(key, {
             ...existing,
@@ -416,7 +433,7 @@ export default function LeadBoard() {
             conversation_id: l.conversation_id || existing?.conversation_id || l.id,
             name: l.name || existing?.name || (l.phone_number ? `Lead ${l.phone_number.slice(-4)}` : 'Customer'),
             phone_number: l.phone_number || existing?.phone_number,
-            stage: l.stage || existing?.stage || 'new',
+            stage: resolvedStage,
             source: l.source || existing?.source || 'India Mart',
             company_name: l.company_name || existing?.company_name || null,
             assigned_to: l.assigned_to || existing?.assigned_to,
@@ -425,6 +442,7 @@ export default function LeadBoard() {
             followup_date: l.followup_date || existing?.followup_date || null,
             followup_notes: l.followup_notes || existing?.followup_notes || null,
             created_at: l.created_at || existing?.created_at,
+            updated_at: l.updated_at || existing?.updated_at,
           })
         })
       }
@@ -506,14 +524,46 @@ export default function LeadBoard() {
     }
   }, [])
 
-  // Optimistic 0ms Stage Change Handler with Dual Database Sync
+  // Optimistic 0ms Stage Change Handler with Server & Cache Sync
   const handleStageChange = useCallback(async (leadId: string, newStage: string) => {
-    // 1. Instant optimistic update
-    setLeads((prev) =>
-      prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, stage: newStage } : l))
-    )
+    // 1. Instant optimistic update in local state & in-memory cache
+    setLeads((prev) => {
+      const updated = prev.map((l) =>
+        l.id === leadId || l.conversation_id === leadId
+          ? { ...l, stage: newStage, updated_at: new Date().toISOString() }
+          : l
+      )
+      if (leadsMemoryStore) {
+        leadsMemoryStore.leads = updated
+      }
+      try {
+        sessionStorage.setItem(
+          'shree_leads_state_cache',
+          JSON.stringify({
+            ...leadsMemoryStore,
+            leads: updated.slice(0, 500),
+          })
+        )
+      } catch {}
+      return updated
+    })
 
-    // 2. Background update to leads and conversations
+    // 2. Persist to API with server admin rights
+    try {
+      await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: leadId,
+          conversation_id: leadId,
+          stage: newStage,
+        }),
+      })
+    } catch (err) {
+      console.error('Failed to change stage via API:', err)
+    }
+
+    // 3. Fallback direct client update to both tables
     try {
       await Promise.all([
         supabase
@@ -526,15 +576,46 @@ export default function LeadBoard() {
           .eq('id', leadId),
       ])
     } catch (err) {
-      console.error('Failed to change stage:', err)
+      console.error('Failed to change stage directly in Supabase:', err)
     }
   }, [])
 
   // Update Lead Details (Notes, Reminders, etc.)
-  const handleUpdateLead = useCallback((leadId: string, updates: Partial<any>) => {
-    setLeads((prev) =>
-      prev.map((l) => (l.id === leadId || l.conversation_id === leadId ? { ...l, ...updates } : l))
-    )
+  const handleUpdateLead = useCallback(async (leadId: string, updates: Partial<any>) => {
+    setLeads((prev) => {
+      const updated = prev.map((l) =>
+        l.id === leadId || l.conversation_id === leadId
+          ? { ...l, ...updates, updated_at: new Date().toISOString() }
+          : l
+      )
+      if (leadsMemoryStore) {
+        leadsMemoryStore.leads = updated
+      }
+      try {
+        sessionStorage.setItem(
+          'shree_leads_state_cache',
+          JSON.stringify({
+            ...leadsMemoryStore,
+            leads: updated.slice(0, 500),
+          })
+        )
+      } catch {}
+      return updated
+    })
+
+    try {
+      await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: leadId,
+          conversation_id: leadId,
+          ...updates,
+        }),
+      })
+    } catch (err) {
+      console.error('Failed to update lead via API:', err)
+    }
   }, [])
 
   // Delete Lead Handler

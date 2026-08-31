@@ -217,6 +217,35 @@ hot_customer:'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
     setStage(newStage)
     onStageChange?.(conversation.id, newStage)
 
+    // Update memory store / cache if present so returning to leads board preserves the new tag
+    if (typeof window !== 'undefined') {
+      try {
+        const savedCache = sessionStorage.getItem('shree_leads_state_cache')
+        if (savedCache) {
+          const parsed = JSON.parse(savedCache)
+          if (Array.isArray(parsed.leads)) {
+            parsed.leads = parsed.leads.map((l: any) =>
+              l.id === conversation.id || l.conversation_id === conversation.id
+                ? { ...l, stage: newStage, updated_at: new Date().toISOString() }
+                : l
+            )
+            sessionStorage.setItem('shree_leads_state_cache', JSON.stringify(parsed))
+          }
+        }
+      } catch {}
+    }
+
+    try {
+      await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          stage: newStage,
+        }),
+      })
+    } catch {}
+
     await fetch(`/api/conversations/${conversation.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
