@@ -59,14 +59,15 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { conversation_id, lead_id, id, followup_action_type, ...rawUpdates } = body
+    const { conversation_id, lead_id, id, phone_number, followup_action_type, ...rawUpdates } = body
 
     const targetConvId = conversation_id || (lead_id ? undefined : id)
     const targetLeadId = id || lead_id
+    const rawPhone = phone_number ? String(phone_number).replace(/\D/g, '') : ''
 
-    if (!targetConvId && !targetLeadId) {
+    if (!targetConvId && !targetLeadId && !rawPhone) {
       return NextResponse.json(
-        { error: 'conversation_id or lead id is required' },
+        { error: 'conversation_id, lead id, or phone_number is required' },
         { status: 400 }
       )
     }
@@ -123,19 +124,37 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // 3. If lead doesn't exist yet in leads table, create/insert it
-    if (!updatedLead && targetConvId) {
+    // 3. Try update by phone number
+    if (!updatedLead && rawPhone) {
+      const { data, error } = await supabaseAdmin
+        .from('leads')
+        .update(updates)
+        .or(`phone_number.eq.${rawPhone},phone_number.eq.+${rawPhone},phone_number.ilike.%${rawPhone.slice(-10)}%`)
+        .select()
+        .maybeSingle()
+
+      if (!error && data) {
+        updatedLead = data
+      }
+    }
+
+    // 4. If lead doesn't exist yet in leads table, create/insert it
+    if (!updatedLead && (targetConvId || rawPhone)) {
       try {
-        const { data: conv } = await supabaseAdmin
-          .from('conversations')
-          .select('name, phone_number, stage, assigned_to')
-          .eq('id', targetConvId)
-          .maybeSingle()
+        let conv = null
+        if (targetConvId) {
+          const { data } = await supabaseAdmin
+            .from('conversations')
+            .select('id, name, phone_number, stage, assigned_to')
+            .eq('id', targetConvId)
+            .maybeSingle()
+          conv = data
+        }
 
         const newLeadPayload: Record<string, any> = {
-          conversation_id: targetConvId,
+          conversation_id: targetConvId || conv?.id || null,
           name: conv?.name || updates.name || null,
-          phone_number: conv?.phone_number || updates.phone_number || null,
+          phone_number: conv?.phone_number || rawPhone || updates.phone_number || null,
           stage: updates.stage || conv?.stage || 'new',
           assigned_to: conv?.assigned_to || updates.assigned_to || null,
           source: 'WhatsApp Direct',
@@ -157,19 +176,32 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // 4. Sync name, stage, and notes back to conversations table
+    // 5. Sync name, stage, and notes back to conversations table
     const convIdToSync = targetConvId || updatedLead?.conversation_id
-    if (convIdToSync) {
-      const convUpdates: Record<string, any> = {}
-      if (updates.name) convUpdates.name = updates.name
-      if (updates.stage) convUpdates.stage = updates.stage
-      if (updates.notes !== undefined) convUpdates.notes = updates.notes
+    const convUpdates: Record<string, any> = {}
+    if (updates.name) convUpdates.name = updates.name
+    if (updates.stage) convUpdates.stage = updates.stage
+    if (updates.notes !== undefined) convUpdates.notes = updates.notes
 
-      if (Object.keys(convUpdates).length > 0) {
+    if (Object.keys(convUpdates).length > 0) {
+      convUpdates.updated_at = new Date().toISOString()
+      if (convIdToSync) {
         await supabaseAdmin
           .from('conversations')
           .update(convUpdates)
           .eq('id', convIdToSync)
+      }
+      if (targetLeadId && targetLeadId !== convIdToSync) {
+        await supabaseAdmin
+          .from('conversations')
+          .update(convUpdates)
+          .eq('id', targetLeadId)
+      }
+      if (rawPhone) {
+        await supabaseAdmin
+          .from('conversations')
+          .update(convUpdates)
+          .or(`phone_number.eq.${rawPhone},phone_number.eq.+${rawPhone},phone_number.ilike.%${rawPhone.slice(-10)}%`)
       }
     }
 

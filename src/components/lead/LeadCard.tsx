@@ -33,7 +33,7 @@ interface LeadCardProps {
   employeeMap?: Map<string, string>
   onToggleSelect?: (id: string) => void
   onDelete?: (id: string) => void
-  onStageChange?: (id: string, newStage: string) => void
+  onStageChange?: (id: string, newStage: string, lead?: any) => void
   onUpdateLead?: (leadId: string, updates: Partial<any>) => void
   onBeforeNavigate?: (id: string) => void
 }
@@ -380,7 +380,7 @@ function LeadCardComponent({
                 key={st.id}
                 type="button"
                 onClick={() => {
-                  onStageChange?.(lead.id || lead.conversation_id, st.id)
+                  onStageChange?.(lead.id || lead.conversation_id, st.id, lead)
                   setShowStageMenu(false)
                 }}
                 className={`w-full text-left px-3 py-2 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between transition-colors ${
@@ -485,7 +485,7 @@ function LeadCardComponent({
                 <button
                   key={st.id}
                   type="button"
-                  onClick={() => onStageChange?.(lead.id || lead.conversation_id, st.id)}
+                  onClick={() => onStageChange?.(lead.id || lead.conversation_id, st.id, lead)}
                   className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
                     isActive
                       ? `${st.activeBg} text-white shadow-2xs`

@@ -404,11 +404,17 @@ export default function LeadBoard() {
       // 2. Merge with leads table records for rich metadata (company, notes, specific source, etc.)
       if (leadsRes.data) {
         leadsRes.data.forEach((l) => {
-          const cleanPhone = (l.phone_number || '').replace(/\D/g, '')
+          const rawPhone = l.phone_number || ''
+          const cleanPhone = rawPhone.replace(/\D/g, '')
           const matchedConvIdByPhone = cleanPhone
             ? phoneToConvId.get(cleanPhone) || phoneToConvId.get(cleanPhone.slice(-10))
             : null
-          const key = l.conversation_id || matchedConvIdByPhone || l.id
+          const key = (l.conversation_id && leadMap.has(l.conversation_id))
+            ? l.conversation_id
+            : (matchedConvIdByPhone && leadMap.has(matchedConvIdByPhone))
+            ? matchedConvIdByPhone
+            : l.id
+
           const existing = leadMap.get(key)
           const empName = l.assigned_to ? empMap.get(l.assigned_to) : null
 
@@ -429,8 +435,8 @@ export default function LeadBoard() {
           leadMap.set(key, {
             ...existing,
             ...l,
-            id: l.id || existing?.id,
-            conversation_id: l.conversation_id || existing?.conversation_id || l.id,
+            id: existing?.id || l.id,
+            conversation_id: existing?.conversation_id || l.conversation_id || l.id,
             name: l.name || existing?.name || (l.phone_number ? `Lead ${l.phone_number.slice(-4)}` : 'Customer'),
             phone_number: l.phone_number || existing?.phone_number,
             stage: resolvedStage,
@@ -525,14 +531,24 @@ export default function LeadBoard() {
   }, [])
 
   // Optimistic 0ms Stage Change Handler with Server & Cache Sync
-  const handleStageChange = useCallback(async (leadId: string, newStage: string) => {
+  const handleStageChange = useCallback(async (leadId: string, newStage: string, leadObj?: any) => {
+    const rawPhone = leadObj?.phone_number ? String(leadObj.phone_number).replace(/\D/g, '') : ''
+
     // 1. Instant optimistic update in local state & in-memory cache
     setLeads((prev) => {
-      const updated = prev.map((l) =>
-        l.id === leadId || l.conversation_id === leadId
+      const updated = prev.map((l) => {
+        const matches =
+          l.id === leadId ||
+          l.conversation_id === leadId ||
+          (leadObj?.id && l.id === leadObj.id) ||
+          (leadObj?.conversation_id && l.conversation_id === leadObj.conversation_id) ||
+          (rawPhone && (l.phone_number || '').replace(/\D/g, '') === rawPhone)
+
+        return matches
           ? { ...l, stage: newStage, updated_at: new Date().toISOString() }
           : l
-      )
+      })
+
       if (leadsMemoryStore) {
         leadsMemoryStore.leads = updated
       }
@@ -554,8 +570,10 @@ export default function LeadBoard() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: leadId,
-          conversation_id: leadId,
+          id: leadObj?.id || leadId,
+          lead_id: leadObj?.id || leadId,
+          conversation_id: leadObj?.conversation_id || leadId,
+          phone_number: leadObj?.phone_number || rawPhone,
           stage: newStage,
         }),
       })
@@ -565,15 +583,16 @@ export default function LeadBoard() {
 
     // 3. Fallback direct client update to both tables
     try {
+      const p = rawPhone ? rawPhone.slice(-10) : ''
       await Promise.all([
         supabase
           .from('leads')
           .update({ stage: newStage, updated_at: new Date().toISOString() })
-          .or(`id.eq.${leadId},conversation_id.eq.${leadId}`),
+          .or(`id.eq.${leadId},conversation_id.eq.${leadId}${p ? `,phone_number.ilike.%${p}%` : ''}`),
         supabase
           .from('conversations')
           .update({ stage: newStage, updated_at: new Date().toISOString() })
-          .eq('id', leadId),
+          .or(`id.eq.${leadId}${p ? `,phone_number.ilike.%${p}%` : ''}`),
       ])
     } catch (err) {
       console.error('Failed to change stage directly in Supabase:', err)
