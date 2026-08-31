@@ -101,9 +101,12 @@ const computeLeadScore = (
     machine_interest: data?.machine_interest,
     callback_ready: data?.callback_ready,
     conversation_summary: data?.conversation_summary || summaryData?.overview,
+    notes: data?.notes,
+    followup_notes: data?.followup_notes,
     intent: summaryData?.intent,
     sentiment: summaryData?.sentiment,
     products: summaryData?.products,
+    budget: data?.budget || data?.lead_budget,
   })
 
   // If sheets API computed a dynamic score and returned it in data.lead_score (ignoring stale 50/52)

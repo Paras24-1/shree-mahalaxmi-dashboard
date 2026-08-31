@@ -146,10 +146,13 @@ function LeadCardComponent({
     callback_ready: lead.callback_ready,
     lead_score: lead.lead_score,
     conversation_summary: lead.conversation_summary,
+    notes: lead.notes,
+    followup_notes: lead.followup_notes,
     messages: lead.last_message ? [{ message: lead.last_message, direction: 'incoming' }] : [],
     intent: summaryData?.intent,
     sentiment: summaryData?.sentiment,
     products: summaryData?.products,
+    budget: lead.budget || lead.lead_budget,
   })
 
   const formattedDate = lead.created_at
