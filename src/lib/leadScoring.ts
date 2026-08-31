@@ -271,3 +271,32 @@ export function calculateLeadScore(params: LeadScoreParams): LeadScoreOutput {
     factors
   }
 }
+
+export function getLeadScore(lead: any): LeadScoreOutput {
+  if (!lead) {
+    return {
+      score: 15,
+      label: 'Cold / Fresh Lead',
+      color: 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+      description: 'Cold / Fresh / 1-Message Lead',
+      factors: []
+    }
+  }
+  return calculateLeadScore({
+    stage: lead.stage,
+    lead_quality: lead.lead_quality,
+    machine_interest: lead.machine_interest,
+    callback_ready: lead.callback_ready,
+    lead_score: lead.lead_score,
+    conversation_summary: lead.conversation_summary,
+    messages: lead.last_message ? [{ message: lead.last_message, direction: 'incoming' }] : [],
+    intent: lead.intent,
+    sentiment: lead.sentiment,
+    products: lead.products,
+  })
+}
+
+export function getLeadScoreValue(lead: any): number {
+  return getLeadScore(lead).score
+}
+

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import LeadCard from './LeadCard'
 import LeadColumn from './LeadColumn'
+import { getLeadScore, getLeadScoreValue } from '@/lib/leadScoring'
 import {
   ChevronLeft,
   BarChart2,
@@ -20,6 +21,9 @@ import {
   RotateCcw,
   LayoutGrid,
   List,
+  TrendingUp,
+  Sparkles,
+  SlidersHorizontal,
 } from 'lucide-react'
 
 export function getLeadColumn(stage: string | undefined | null, createdAt?: string): string {
@@ -69,6 +73,16 @@ export function getLeadColumn(stage: string | undefined | null, createdAt?: stri
 }
 
 type DateFilterType = 'all' | 'today' | 'yesterday' | 'this_week' | 'custom'
+export type ScoreFilterType =
+  | 'all'
+  | 'high_70'
+  | 'exact'
+  | 'min'
+  | 'max'
+  | 'range'
+  | 'hot'
+  | 'warm'
+  | 'cold'
 
 function matchesDateFilter(
   createdAt: string | undefined,
@@ -111,6 +125,41 @@ function matchesDateFilter(
   return true
 }
 
+function matchesScoreFilter(
+  score: number,
+  filterType: ScoreFilterType,
+  targetVal?: string,
+  minVal?: string,
+  maxVal?: string
+): boolean {
+  if (filterType === 'all') return true
+  if (filterType === 'high_70') return score >= 70
+  if (filterType === 'hot') return score >= 75
+  if (filterType === 'warm') return score >= 45 && score < 75
+  if (filterType === 'cold') return score < 45
+  if (filterType === 'exact') {
+    if (!targetVal) return true
+    const num = Number(targetVal)
+    return !isNaN(num) ? score === num : true
+  }
+  if (filterType === 'min') {
+    if (!targetVal) return true
+    const num = Number(targetVal)
+    return !isNaN(num) ? score >= num : true
+  }
+  if (filterType === 'max') {
+    if (!targetVal) return true
+    const num = Number(targetVal)
+    return !isNaN(num) ? score <= num : true
+  }
+  if (filterType === 'range') {
+    const minNum = minVal ? Number(minVal) : 0
+    const maxNum = maxVal ? Number(maxVal) : 100
+    return score >= minNum && score <= maxNum
+  }
+  return true
+}
+
 const SOURCES = ['All', 'India Mart', 'Face Book', 'Google Ads', 'WhatsApp CRM', 'Referral']
 
 export default function LeadBoard() {
@@ -130,6 +179,13 @@ export default function LeadBoard() {
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const [sourceFilter, setSourceFilter] = useState('All')
+
+  // Lead Score Filter State
+  const [scoreFilterType, setScoreFilterType] = useState<ScoreFilterType>('all')
+  const [scoreTarget, setScoreTarget] = useState<string>('70')
+  const [scoreMin, setScoreMin] = useState<string>('50')
+  const [scoreMax, setScoreMax] = useState<string>('100')
+
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'card_list' | 'kanban'>('card_list')
 
@@ -368,16 +424,21 @@ export default function LeadBoard() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const rows = filteredLeads.map((l) => ({
-      Name: l.name || '',
-      Phone: l.phone_number || '',
-      Company: l.company_name || '',
-      Source: l.source || '',
-      Stage: l.stage || 'new',
-      'Follow-up Reminder': l.followup_date || '',
-      Notes: l.notes || '',
-      'Created At': l.created_at || '',
-    }))
+    const rows = filteredLeads.map((l) => {
+      const scoreObj = getLeadScore(l)
+      return {
+        Name: l.name || '',
+        Phone: l.phone_number || '',
+        Company: l.company_name || '',
+        Source: l.source || '',
+        'Lead Score': scoreObj.score,
+        'Lead Quality': scoreObj.label,
+        Stage: l.stage || 'new',
+        'Follow-up Reminder': l.followup_date || '',
+        Notes: l.notes || '',
+        'Created At': l.created_at || '',
+      }
+    })
 
     if (rows.length === 0) {
       alert('No leads to export')
@@ -408,19 +469,54 @@ export default function LeadBoard() {
     })
   }, [])
 
+  // Pre-calculated Lead Scores for super-fast filtering
+  const leadScores = useMemo(() => {
+    const map = new Map<string, number>()
+    leads.forEach((l) => {
+      const key = l.id || l.conversation_id
+      map.set(key, getLeadScoreValue(l))
+    })
+    return map
+  }, [leads])
+
   // Fast In-Memory Filtered Leads
   const filteredLeads = useMemo(() => {
     const q = searchQuery.toLowerCase().trim()
 
     return leads.filter((lead) => {
-      // 1. Search filter
+      const leadKey = lead.id || lead.conversation_id
+      const leadScore = leadScores.get(leadKey) ?? getLeadScoreValue(lead)
+
+      // 1. Search filter with lead score support (e.g. "70", "score: 70", "score 70", ">=70", "=70")
       if (q) {
+        let matchesScoreSyntax = false
+        const scoreSyntaxMatch = q.match(/^(?:score\s*[:=]?\s*|\s*)(>=|<=|>|<|=)?\s*(\d{1,3})$/i)
+        if (scoreSyntaxMatch && !isNaN(Number(scoreSyntaxMatch[2]))) {
+          const op = scoreSyntaxMatch[1] || '='
+          const targetNum = Number(scoreSyntaxMatch[2])
+          if (op === '=' || !scoreSyntaxMatch[1]) {
+            if (leadScore === targetNum) matchesScoreSyntax = true
+          } else if (op === '>=') {
+            if (leadScore >= targetNum) matchesScoreSyntax = true
+          } else if (op === '>') {
+            if (leadScore > targetNum) matchesScoreSyntax = true
+          } else if (op === '<=') {
+            if (leadScore <= targetNum) matchesScoreSyntax = true
+          } else if (op === '<') {
+            if (leadScore < targetNum) matchesScoreSyntax = true
+          }
+        }
+
         const nameMatch = lead.name?.toLowerCase().includes(q)
         const phoneMatch = lead.phone_number?.toLowerCase().includes(q)
         const companyMatch = lead.company_name?.toLowerCase().includes(q)
         const sourceMatch = lead.source?.toLowerCase().includes(q)
         const notesMatch = lead.notes?.toLowerCase().includes(q)
-        if (!nameMatch && !phoneMatch && !companyMatch && !sourceMatch && !notesMatch) return false
+        const scoreTextMatch = String(leadScore).includes(q)
+
+        if (!matchesScoreSyntax && !nameMatch && !phoneMatch && !companyMatch && !sourceMatch && !notesMatch && !scoreTextMatch) {
+          return false
+        }
       }
 
       // 2. Date filter
@@ -433,7 +529,12 @@ export default function LeadBoard() {
         return false
       }
 
-      // 4. Stage Tab filter
+      // 4. Lead Score filter
+      if (!matchesScoreFilter(leadScore, scoreFilterType, scoreTarget, scoreMin, scoreMax)) {
+        return false
+      }
+
+      // 5. Stage Tab filter
       if (activeStageTab !== 'all') {
         const col = getLeadColumn(lead.stage, lead.created_at)
         if (col !== activeStageTab) return false
@@ -441,13 +542,31 @@ export default function LeadBoard() {
 
       return true
     })
-  }, [leads, searchQuery, dateFilter, customStartDate, customEndDate, sourceFilter, activeStageTab])
+  }, [
+    leads,
+    leadScores,
+    searchQuery,
+    dateFilter,
+    customStartDate,
+    customEndDate,
+    sourceFilter,
+    scoreFilterType,
+    scoreTarget,
+    scoreMin,
+    scoreMax,
+    activeStageTab,
+  ])
 
   // Count calculations for Status Tabs
   const stageCounts = useMemo(() => {
-    const dateFiltered = leads.filter((l) =>
-      matchesDateFilter(l.created_at, dateFilter, customStartDate, customEndDate)
-    )
+    const dateFiltered = leads.filter((l) => {
+      const leadKey = l.id || l.conversation_id
+      const leadScore = leadScores.get(leadKey) ?? getLeadScoreValue(l)
+      const matchesDate = matchesDateFilter(l.created_at, dateFilter, customStartDate, customEndDate)
+      const matchesSource = sourceFilter === 'All' || l.source === sourceFilter
+      const matchesScore = matchesScoreFilter(leadScore, scoreFilterType, scoreTarget, scoreMin, scoreMax)
+      return matchesDate && matchesSource && matchesScore
+    })
 
     let totalAll = dateFiltered.length
     let newCount = 0
@@ -473,7 +592,7 @@ export default function LeadBoard() {
       confirm: confirmCount,
       cancel: cancelCount,
     }
-  }, [leads, dateFilter, customStartDate, customEndDate])
+  }, [leads, leadScores, dateFilter, customStartDate, customEndDate, sourceFilter, scoreFilterType, scoreTarget, scoreMin, scoreMax])
 
   const STAGE_TABS = [
     { id: 'all', label: 'All', count: stageCounts.all, dotColor: 'bg-purple-500', amount: '0.0' },
@@ -487,14 +606,28 @@ export default function LeadBoard() {
   // Reset render limit when tab or filter changes
   useEffect(() => {
     setRenderLimit(40)
-  }, [activeStageTab, searchQuery, dateFilter, sourceFilter])
+  }, [activeStageTab, searchQuery, dateFilter, sourceFilter, scoreFilterType, scoreTarget, scoreMin, scoreMax])
 
   // Lazy render more items as user scrolls near bottom
   const visibleLeads = useMemo(() => {
     return filteredLeads.slice(0, renderLimit)
   }, [filteredLeads, renderLimit])
 
-  const activeFilterCount = (sourceFilter !== 'All' ? 1 : 0) + (dateFilter !== 'all' ? 1 : 0)
+  const activeFilterCount =
+    (sourceFilter !== 'All' ? 1 : 0) +
+    (dateFilter !== 'all' ? 1 : 0) +
+    (scoreFilterType !== 'all' ? 1 : 0)
+
+  const handleResetFilters = () => {
+    setSourceFilter('All')
+    setDateFilter('all')
+    setCustomStartDate('')
+    setCustomEndDate('')
+    setScoreFilterType('all')
+    setScoreTarget('70')
+    setScoreMin('50')
+    setScoreMax('100')
+  }
 
   if (loading && leads.length === 0) {
     return (
@@ -543,25 +676,140 @@ export default function LeadBoard() {
             </button>
 
             {showFilterMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl p-4 z-50 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 text-gray-800 dark:text-gray-200">
+              <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl p-4 z-50 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 text-gray-800 dark:text-gray-200 max-h-[85vh] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
-                  <span className="font-bold text-gray-900 dark:text-white">Filter Leads</span>
+                  <span className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />
+                    Filter Leads
+                  </span>
                   {activeFilterCount > 0 && (
                     <button
-                      onClick={() => {
-                        setSourceFilter('All')
-                        setDateFilter('all')
-                        setCustomStartDate('')
-                        setCustomEndDate('')
-                      }}
+                      onClick={handleResetFilters}
                       className="text-[11px] text-purple-600 hover:underline flex items-center gap-1 font-semibold"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      Reset
+                      Reset ({activeFilterCount})
                     </button>
                   )}
                 </div>
 
+                {/* Lead Score Filter Section */}
+                <div className="bg-purple-50/50 dark:bg-purple-950/20 p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/40 space-y-2">
+                  <label className="block text-[10px] font-bold text-purple-900 dark:text-purple-300 uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <TrendingUp className="w-3.5 h-3.5 text-purple-600" />
+                      Lead Score Filter
+                    </span>
+                    {scoreFilterType !== 'all' && (
+                      <span className="text-[10px] bg-purple-600 text-white px-1.5 py-0.2 rounded-full font-bold">
+                        ACTIVE
+                      </span>
+                    )}
+                  </label>
+
+                  <select
+                    value={scoreFilterType}
+                    onChange={(e) => setScoreFilterType(e.target.value as ScoreFilterType)}
+                    className="w-full p-2 border border-purple-200 dark:border-purple-800 rounded-xl bg-white dark:bg-gray-950 font-semibold text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-600 outline-none"
+                  >
+                    <option value="all">🎯 All Scores (0 - 100)</option>
+                    <option value="high_70">🔥 Score 70+ (High Intent)</option>
+                    <option value="exact">🎯 Exact Score (= 70, etc.)</option>
+                    <option value="min">📈 Minimum Score (≥)</option>
+                    <option value="max">📉 Maximum Score (≤)</option>
+                    <option value="range">↔️ Score Range (Min - Max)</option>
+                    <option value="hot">🟢 Hot Leads (Score 75 - 100)</option>
+                    <option value="warm">🟡 Warm Leads (Score 45 - 74)</option>
+                    <option value="cold">⚪ Cold / Fresh (&lt; 45)</option>
+                  </select>
+
+                  {(scoreFilterType === 'exact' || scoreFilterType === 'min' || scoreFilterType === 'max') && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                        <span>
+                          {scoreFilterType === 'exact'
+                            ? 'Target Score'
+                            : scoreFilterType === 'min'
+                            ? 'Minimum Score (≥)'
+                            : 'Maximum Score (≤)'}
+                          :
+                        </span>
+                        <span className="text-purple-600 font-extrabold text-xs">
+                          {scoreFilterType === 'exact' ? '=' : scoreFilterType === 'min' ? '≥' : '≤'}{' '}
+                          {scoreTarget || 70}/100
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={scoreTarget}
+                          onChange={(e) => setScoreTarget(e.target.value)}
+                          placeholder="e.g. 70"
+                          className="w-full p-2 border border-purple-200 dark:border-purple-800 rounded-xl bg-white dark:bg-gray-950 font-bold text-xs outline-none focus:ring-2 focus:ring-purple-600"
+                        />
+                      </div>
+                      {/* Quick preset buttons */}
+                      <div className="flex items-center gap-1 pt-0.5 flex-wrap">
+                        <span className="text-[10px] text-gray-400 font-semibold">Quick:</span>
+                        {['30', '50', '60', '70', '80', '90'].map((num) => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => setScoreTarget(num)}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-colors ${
+                              scoreTarget === num
+                                ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-purple-50'
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {scoreFilterType === 'range' && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                        <span>Score Range:</span>
+                        <span className="text-purple-600 font-extrabold text-xs">
+                          {scoreMin || 0} to {scoreMax || 100}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-semibold block mb-0.5">Min</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={scoreMin}
+                            onChange={(e) => setScoreMin(e.target.value)}
+                            placeholder="Min (e.g. 50)"
+                            className="w-full p-1.5 border border-purple-200 dark:border-purple-800 rounded-lg bg-white dark:bg-gray-950 font-bold text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-semibold block mb-0.5">Max</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={scoreMax}
+                            onChange={(e) => setScoreMax(e.target.value)}
+                            placeholder="Max (e.g. 100)"
+                            className="w-full p-1.5 border border-purple-200 dark:border-purple-800 rounded-lg bg-white dark:bg-gray-950 font-bold text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Date Range Section */}
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                     Date Range
@@ -569,7 +817,7 @@ export default function LeadBoard() {
                   <select
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value as DateFilterType)}
-                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 font-semibold"
+                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 font-semibold text-xs"
                   >
                     <option value="all">All Dates ({leads.length})</option>
                     <option value="today">Today's Leads</option>
@@ -596,6 +844,7 @@ export default function LeadBoard() {
                   </div>
                 )}
 
+                {/* Lead Source Section */}
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                     Lead Source
@@ -603,7 +852,7 @@ export default function LeadBoard() {
                   <select
                     value={sourceFilter}
                     onChange={(e) => setSourceFilter(e.target.value)}
-                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 font-semibold"
+                    className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-950 font-semibold text-xs"
                   >
                     {SOURCES.map((s) => (
                       <option key={s} value={s}>
@@ -615,7 +864,7 @@ export default function LeadBoard() {
 
                 <button
                   onClick={() => setShowFilterMenu(false)}
-                  className="w-full py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold shadow-xs text-center"
+                  className="w-full py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold shadow-xs text-center transition-colors"
                 >
                   Apply Filters
                 </button>
@@ -689,25 +938,153 @@ export default function LeadBoard() {
         </div>
       </div>
 
-      {/* 2. Clean White Search Bar */}
-      <div className="relative mb-3">
-        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          placeholder="Search leads by name, phone, company, or notes..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400 shadow-2xs focus:outline-none focus:ring-2 focus:ring-purple-600 font-medium transition-all"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+      {/* 2. Clean White Search Bar with Quick Score Dropdown */}
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search leads by name, phone, company, score (e.g. 70, score>=70)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400 shadow-2xs focus:outline-none focus:ring-2 focus:ring-purple-600 font-medium transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* 1-Tap Quick Score Filter Pill */}
+        <div className="relative shrink-0">
+          <select
+            value={
+              scoreFilterType === 'exact' && scoreTarget === '70'
+                ? 'exact_70'
+                : scoreFilterType === 'high_70'
+                ? 'high_70'
+                : scoreFilterType
+            }
+            onChange={(e) => {
+              const val = e.target.value
+              if (val === 'exact_70') {
+                setScoreFilterType('exact')
+                setScoreTarget('70')
+              } else if (val === 'high_70') {
+                setScoreFilterType('high_70')
+                setScoreTarget('70')
+              } else {
+                setScoreFilterType(val as ScoreFilterType)
+              }
+            }}
+            className={`py-2.5 px-3 rounded-2xl border text-xs font-bold transition-all shadow-2xs cursor-pointer outline-none ${
+              scoreFilterType !== 'all'
+                ? 'bg-purple-100 dark:bg-purple-950/70 border-purple-300 dark:border-purple-800 text-purple-800 dark:text-purple-200 ring-2 ring-purple-500/20'
+                : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50'
+            }`}
+            title="Quick Lead Score Filter"
           >
-            <X className="w-4 h-4" />
-          </button>
-        )}
+            <option value="all">🎯 Score: All</option>
+            <option value="high_70">🔥 Score: 70+</option>
+            <option value="exact_70">🎯 Score: Exact 70</option>
+            <option value="hot">🟢 Hot (75+)</option>
+            <option value="warm">🟡 Warm (45-74)</option>
+            <option value="cold">⚪ Cold (&lt;45)</option>
+          </select>
+        </div>
       </div>
+
+      {/* Active Filter Chips / Badges Bar */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-3 px-0.5 animate-in fade-in duration-150">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Filters:</span>
+
+          {scoreFilterType !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-lg text-xs font-semibold shadow-2xs">
+              <TrendingUp className="w-3 h-3 text-purple-600" />
+              <span>
+                Score:{' '}
+                {scoreFilterType === 'high_70'
+                  ? '≥ 70'
+                  : scoreFilterType === 'hot'
+                  ? 'Hot (≥ 75)'
+                  : scoreFilterType === 'warm'
+                  ? 'Warm (45 - 74)'
+                  : scoreFilterType === 'cold'
+                  ? 'Cold (< 45)'
+                  : scoreFilterType === 'exact'
+                  ? `= ${scoreTarget || 70}`
+                  : scoreFilterType === 'min'
+                  ? `≥ ${scoreTarget || 70}`
+                  : scoreFilterType === 'max'
+                  ? `≤ ${scoreTarget || 70}`
+                  : scoreFilterType === 'range'
+                  ? `${scoreMin || 0} - ${scoreMax || 100}`
+                  : ''}
+              </span>
+              <button
+                onClick={() => setScoreFilterType('all')}
+                className="hover:text-purple-900 dark:hover:text-white p-0.5 rounded transition-colors"
+                title="Clear score filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {sourceFilter !== 'All' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-semibold shadow-2xs">
+              <span>Source: {sourceFilter}</span>
+              <button
+                onClick={() => setSourceFilter('All')}
+                className="hover:text-indigo-900 dark:hover:text-white p-0.5 rounded transition-colors"
+                title="Clear source filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {dateFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 rounded-lg text-xs font-semibold shadow-2xs">
+              <Calendar className="w-3 h-3 text-sky-600" />
+              <span>
+                Date:{' '}
+                {dateFilter === 'today'
+                  ? 'Today'
+                  : dateFilter === 'yesterday'
+                  ? 'Yesterday'
+                  : dateFilter === 'this_week'
+                  ? 'Last 7 Days'
+                  : 'Custom Date'}
+              </span>
+              <button
+                onClick={() => {
+                  setDateFilter('all')
+                  setCustomStartDate('')
+                  setCustomEndDate('')
+                }}
+                className="hover:text-sky-900 dark:hover:text-white p-0.5 rounded transition-colors"
+                title="Clear date filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          <button
+            onClick={handleResetFilters}
+            className="text-[11px] text-gray-500 hover:text-purple-600 hover:underline font-semibold ml-1 flex items-center gap-0.5"
+          >
+            <RotateCcw className="w-2.5 h-2.5" />
+            Clear All
+          </button>
+        </div>
+      )}
 
       {/* 3. Horizontal Scrollable Stage Filter Chips / Cards */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none mb-3.5">
