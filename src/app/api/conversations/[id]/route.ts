@@ -99,8 +99,8 @@ export async function PATCH(
 
     // Only allow updating safe direct DB columns on conversations table
     const directDbColumns = isStaffEmployee 
-      ? ['stage', 'notes', 'metadata', 'is_blocked'] 
-      : ['stage', 'notes', 'assigned_to', 'assignment_status', 'metadata', 'is_blocked']
+      ? ['stage', 'notes', 'is_blocked'] 
+      : ['stage', 'notes', 'assigned_to', 'assignment_status', 'is_blocked']
     
     const filteredBody: Record<string, any> = {}
     for (const key of directDbColumns) {
@@ -122,8 +122,6 @@ export async function PATCH(
         user_type: body.lead_type,
         Lead_Type: body.lead_type
       }
-      filteredBody.metadata = convMeta
-
       // Also update linked lead record metadata if it exists by conversation_id or phone
       let linkedLead: any = null
       const { data: leadByConv } = await supabaseAdmin
