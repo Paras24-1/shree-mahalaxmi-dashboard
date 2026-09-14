@@ -84,7 +84,7 @@ export async function PATCH(
 
     const { data: conv } = await supabaseAdmin
       .from('conversations')
-      .select('id, assigned_to, metadata, phone_number, name')
+      .select('id, assigned_to, phone_number, name')
       .eq('id', id)
       .eq('org_id', profile.orgId)
       .maybeSingle()
@@ -111,18 +111,6 @@ export async function PATCH(
 
     // Handle explicit lead_type update
     if (body.lead_type !== undefined) {
-      let convMeta = conv.metadata || {}
-      if (typeof convMeta === 'string') {
-        try { convMeta = JSON.parse(convMeta) } catch {}
-      }
-      convMeta = { 
-        ...convMeta, 
-        lead_type: body.lead_type,
-        category: body.lead_type,
-        user_type: body.lead_type,
-        Lead_Type: body.lead_type
-      }
-      // Also update linked lead record metadata if it exists by conversation_id or phone
       let linkedLead: any = null
       const { data: leadByConv } = await supabaseAdmin
         .from('leads')
@@ -144,18 +132,29 @@ export async function PATCH(
         linkedLead = leadByPhone
       }
 
+      let leadMeta = linkedLead?.metadata || {}
+      if (typeof leadMeta === 'string') {
+        try { leadMeta = JSON.parse(leadMeta) } catch {}
+      }
+
+      const currentLeadType = (leadMeta.lead_type || leadMeta.category || '').toLowerCase()
+      let targetLeadType = body.lead_type
+
+      // Protect from downgrading
+      if (targetLeadType?.toLowerCase() === 'unfiltered' && currentLeadType && currentLeadType !== 'unfiltered') {
+        targetLeadType = currentLeadType
+        body.lead_type = currentLeadType // update body so any background sync gets the preserved type
+      }
+
+      leadMeta = { 
+        ...leadMeta, 
+        lead_type: targetLeadType,
+        category: targetLeadType,
+        user_type: targetLeadType,
+        Lead_Type: targetLeadType
+      }
+
       if (linkedLead) {
-        let leadMeta = linkedLead.metadata || {}
-        if (typeof leadMeta === 'string') {
-          try { leadMeta = JSON.parse(leadMeta) } catch {}
-        }
-        leadMeta = { 
-          ...leadMeta, 
-          lead_type: body.lead_type,
-          category: body.lead_type,
-          user_type: body.lead_type,
-          Lead_Type: body.lead_type
-        }
         await supabaseAdmin
           .from('leads')
           .update({ 
@@ -163,22 +162,17 @@ export async function PATCH(
             conversation_id: id // ensure linked
           })
           .eq('id', linkedLead.id)
-      } else if (conv.phone_number) {
-        // Upsert lead record so it appears in CRM tables
+      } else {
+        // Create new lead if it doesn't exist
         await supabaseAdmin
           .from('leads')
-          .upsert({
-            org_id: profile.orgId,
+          .insert({
             conversation_id: id,
-            phone_number: conv.phone_number,
+            org_id: profile.orgId,
+            phone_number: conv.phone_number || '',
             name: conv.name || '',
-            metadata: { 
-              lead_type: body.lead_type,
-              category: body.lead_type,
-              user_type: body.lead_type,
-              Lead_Type: body.lead_type
-            }
-          }, { onConflict: 'conversation_id' })
+            metadata: leadMeta
+          })
       }
     }
 

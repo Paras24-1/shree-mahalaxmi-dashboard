@@ -85,8 +85,32 @@ export async function PATCH(req: NextRequest) {
 
     let mergedMeta = { ...(parsedMeta || {}) };
 
-    // Explicit lead_type handling
-    const targetLeadType = updates.lead_type || body.lead_type
+    // Fetch existing lead to protect high-value lead_types from being downgraded to 'unfiltered'
+    let existingLead: any = null
+    if (leadId) {
+      const res = await supabaseAdmin.from('leads').select('metadata').eq('id', leadId).eq('org_id', orgId).maybeSingle()
+      existingLead = res.data
+    }
+    if (!existingLead && conversation_id) {
+      const res = await supabaseAdmin.from('leads').select('metadata').eq('conversation_id', conversation_id).eq('org_id', orgId).maybeSingle()
+      existingLead = res.data
+    }
+    if (!existingLead && phone_number) {
+      const phone = String(phone_number).replace(/\D/g, '').slice(-10)
+      const res = await supabaseAdmin.from('leads').select('metadata').ilike('phone_number', `%${phone}`).eq('org_id', orgId).maybeSingle()
+      existingLead = res.data
+    }
+
+    const currentLeadType = (existingLead?.metadata?.lead_type || existingLead?.metadata?.category || '').toLowerCase()
+    let targetLeadType = updates.lead_type || body.lead_type
+    
+    // Protect from downgrading
+    if (targetLeadType?.toLowerCase() === 'unfiltered' && currentLeadType && currentLeadType !== 'unfiltered') {
+      targetLeadType = currentLeadType
+      delete updates.lead_type
+      delete body.lead_type
+    }
+
     if (targetLeadType) {
       mergedMeta.lead_type = targetLeadType
       mergedMeta.category = targetLeadType
@@ -224,57 +248,8 @@ export async function PATCH(req: NextRequest) {
           .eq('id', targetConvId)
           .eq('org_id', orgId)
       }
-
-      if (targetLeadType) {
-        const { data: conv } = await supabaseAdmin
-          .from('conversations')
-          .select('id, metadata')
-          .eq('id', targetConvId)
-          .eq('org_id', orgId)
-          .maybeSingle()
-
-        if (conv) {
-          let meta = conv.metadata || {}
-          if (typeof meta === 'string') {
-            try { meta = JSON.parse(meta) } catch {}
-          }
-          meta.lead_type = targetLeadType
-          meta.category = targetLeadType
-          meta.user_type = targetLeadType
-          meta.Lead_Type = targetLeadType
-          await supabaseAdmin
-            .from('conversations')
-            .update({ metadata: meta })
-            .eq('id', targetConvId)
-            .eq('org_id', orgId)
-        }
-      }
-    } else if (targetPhone && targetLeadType) {
-      // Find conversation by phone number to sync
-      const phone = String(targetPhone).replace(/\D/g, '').slice(-10)
-      const { data: conv } = await supabaseAdmin
-        .from('conversations')
-        .select('id, metadata')
-        .ilike('phone_number', `%${phone}`)
-        .eq('org_id', orgId)
-        .maybeSingle()
-
-      if (conv) {
-        let meta = conv.metadata || {}
-        if (typeof meta === 'string') {
-          try { meta = JSON.parse(meta) } catch {}
-        }
-        meta.lead_type = targetLeadType
-        meta.category = targetLeadType
-        meta.user_type = targetLeadType
-        meta.Lead_Type = targetLeadType
-        await supabaseAdmin
-          .from('conversations')
-          .update({ metadata: meta })
-          .eq('id', conv.id)
-          .eq('org_id', orgId)
-      }
     }
+
 
     // For Osmo RO tenant, trigger auto phonebook sync in background
     isOsmoOrg(orgId).then((isOsmo) => {
