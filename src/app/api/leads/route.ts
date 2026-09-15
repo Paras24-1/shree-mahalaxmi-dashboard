@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, getOrgId } from '@/lib/supabase'
 import { isOsmoOrg, syncOsmoPhonebooks } from '@/lib/osmoPhonebooks'
+import { handlePaanifilterStateAssignment } from '@/lib/paanifilter'
 
 export async function GET(req: NextRequest) {
   try {
@@ -105,7 +106,11 @@ export async function PATCH(req: NextRequest) {
     let targetLeadType = updates.lead_type || body.lead_type
     
     // Protect from downgrading
-    if (targetLeadType?.toLowerCase() === 'unfiltered' && currentLeadType && currentLeadType !== 'unfiltered') {
+    const targetLower = targetLeadType?.toString().toLowerCase().trim() || ''
+    const isDowngrade = ['unfiltered', 'unknown', 'none', 'null', 'na', 'n/a', ''].includes(targetLower)
+    const isCurrentlyValid = currentLeadType && !['unfiltered', 'unknown', 'none', 'null', 'na', 'n/a', ''].includes(currentLeadType)
+
+    if (isDowngrade && isCurrentlyValid) {
       targetLeadType = currentLeadType
       delete updates.lead_type
       delete body.lead_type
@@ -250,7 +255,15 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-
+    // Check if state is present for Paanifilter assignment
+    const extractedState = updates.state || mergedMeta.state || body.state
+    if (extractedState && targetConvId) {
+      // Check org slug if it's paanifilter
+      const { data: orgData } = await supabaseAdmin.from('organizations').select('slug').eq('id', orgId).maybeSingle()
+      if (orgData?.slug === 'osmo-ro-2') {
+        handlePaanifilterStateAssignment(orgId, targetConvId, extractedState).catch(console.error)
+      }
+    }
     // For Osmo RO tenant, trigger auto phonebook sync in background
     isOsmoOrg(orgId).then((isOsmo) => {
       if (isOsmo) syncOsmoPhonebooks(orgId).catch(console.error)
