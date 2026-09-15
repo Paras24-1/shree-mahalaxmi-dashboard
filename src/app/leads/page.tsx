@@ -364,17 +364,17 @@ function LeadsContent() {
   const followupLeads = leads.filter(l => l.stage === 'followup' || !!l.followup_date).length
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden text-gray-900 dark:text-gray-100">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 overflow-hidden text-gray-900 dark:text-gray-100">
       
       {/* Header Banner */}
-      <header className="h-14 bg-emerald-600 dark:bg-emerald-800 shrink-0 flex items-center justify-between px-6 z-50 shadow-md">
+      <header className="h-16 shrink-0 flex items-center justify-between px-6 z-50 bg-white/70 dark:bg-gray-950/70 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-800/50 shadow-sm transition-all">
         <div className="flex items-center gap-3">
           <Sidebar />
-          <span className="text-white font-semibold text-lg flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 opacity-90" />
+          <span className="text-gray-900 dark:text-white font-bold text-lg flex items-center gap-2 tracking-tight">
+            <MessageSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             Lead CRM Portal
           </span>
-          <span className="text-xs text-emerald-200 border border-emerald-500 rounded px-2 py-0.5 ml-2 font-mono">
+          <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/50 dark:bg-emerald-900/30 border border-emerald-200/50 dark:border-emerald-800/50 rounded-full px-2.5 py-0.5 ml-2 tracking-wider">
             {org?.name || 'Tenant System'}
           </span>
         </div>
@@ -382,9 +382,9 @@ function LeadsContent() {
         <button
           onClick={handleDownloadCSV}
           disabled={leads.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-800 text-emerald-600 dark:text-emerald-400 text-xs font-semibold rounded-lg shadow transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
         >
-          <Download className="w-3.5 h-3.5" />
+          <Download className="w-4 h-4" />
           Export CSV
         </button>
       </header>
@@ -394,15 +394,15 @@ function LeadsContent() {
         <div className="flex-1 flex flex-col p-6 overflow-y-auto space-y-6">
           
           {/* Quick Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetricCard label="Total CRM Leads" value={totalLeads} color="border-l-blue-500 text-blue-600" />
-            <MetricCard label="Hot Status Leads" value={hotLeads} color="border-l-red-500 text-red-600" />
-            <MetricCard label="Warm Status Leads" value={warmLeads} color="border-l-orange-500 text-orange-600" />
-            <MetricCard label="Active Follow-ups" value={followupLeads} color="border-l-cyan-500 text-cyan-600" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            <MetricCard label="Total CRM Leads" value={totalLeads} bgGradient="from-blue-500 to-indigo-600" shadowColor="shadow-blue-500/20" icon={<User className="w-5 h-5 text-blue-100" />} />
+            <MetricCard label="Hot Status Leads" value={hotLeads} bgGradient="from-rose-500 to-red-600" shadowColor="shadow-rose-500/20" icon={<TrendingUp className="w-5 h-5 text-rose-100" />} />
+            <MetricCard label="Warm Status Leads" value={warmLeads} bgGradient="from-amber-400 to-orange-500" shadowColor="shadow-amber-500/20" icon={<AlertCircle className="w-5 h-5 text-amber-100" />} />
+            <MetricCard label="Active Follow-ups" value={followupLeads} bgGradient="from-emerald-400 to-teal-500" shadowColor="shadow-teal-500/20" icon={<Calendar className="w-5 h-5 text-emerald-100" />} />
           </div>
 
           {/* Filtering Controls */}
-          <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
+          <div className="bg-white/70 dark:bg-gray-900/70 backdrop-blur-md p-4 rounded-2xl border border-white dark:border-gray-800/50 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between transition-all">
             <div className="relative w-full md:w-80">
               <input
                 type="text"
@@ -410,19 +410,19 @@ function LeadsContent() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleSearchKeyPress}
-                className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50/50 dark:bg-gray-950/50 border border-gray-200/60 dark:border-gray-800/60 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-gray-400"
               />
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+              <Search className="w-4 h-4 text-emerald-500 absolute left-3.5 top-3.5" />
             </div>
 
-            <div className="flex gap-2 w-full md:w-auto">
+            <div className="flex gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
               {/* Stage Filter */}
-              <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 px-3 py-1.5 rounded-lg w-1/2 md:w-auto">
-                <Filter className="w-3.5 h-3.5 text-gray-400" />
+              <div className="flex items-center gap-1.5 bg-gray-50/50 dark:bg-gray-950/50 border border-gray-200/60 dark:border-gray-800/60 px-4 py-2 rounded-xl w-1/2 md:w-auto shrink-0 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all">
+                <Filter className="w-4 h-4 text-emerald-500" />
                 <select
                   value={selectedStage}
                   onChange={(e) => setSelectedStage(e.target.value)}
-                  className="bg-transparent text-xs text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer w-full"
+                  className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer w-full"
                 >
                   <option value="">All Stages</option>
                   {STAGES.map(s => (
@@ -432,12 +432,12 @@ function LeadsContent() {
               </div>
 
               {/* Quality Filter */}
-              <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 px-3 py-1.5 rounded-lg w-1/2 md:w-auto">
-                <Tag className="w-3.5 h-3.5 text-gray-400" />
+              <div className="flex items-center gap-1.5 bg-gray-50/50 dark:bg-gray-950/50 border border-gray-200/60 dark:border-gray-800/60 px-4 py-2 rounded-xl w-1/2 md:w-auto shrink-0 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all">
+                <Tag className="w-4 h-4 text-emerald-500" />
                 <select
                   value={selectedQuality}
                   onChange={(e) => setSelectedQuality(e.target.value)}
-                  className="bg-transparent text-xs text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer w-full"
+                  className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer w-full"
                 >
                   <option value="">All Qualities</option>
                   <option value="hot">HOT</option>
@@ -447,28 +447,28 @@ function LeadsContent() {
               </div>
 
               {/* Date Filter */}
-              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 px-3 py-1.5 rounded-lg w-full md:w-auto">
-                <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <div className="flex items-center gap-2 bg-gray-50/50 dark:bg-gray-950/50 border border-gray-200/60 dark:border-gray-800/60 px-4 py-2 rounded-xl w-full md:w-auto shrink-0 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all">
+                <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-transparent text-xs text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
                   title="Start Date"
                 />
-                <span className="text-gray-400 text-xs shrink-0">to</span>
+                <span className="text-gray-300 dark:text-gray-700 text-xs shrink-0 font-bold">to</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-transparent text-xs text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
                   title="End Date"
                 />
               </div>
 
               <button
                 onClick={fetchLeads}
-                className="hidden md:flex items-center gap-1.5 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 text-xs font-semibold rounded-lg transition-colors border border-emerald-200 dark:border-emerald-900/50"
+                className="hidden md:flex items-center justify-center gap-1.5 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/20 hover:shadow-lg hover:-translate-y-0.5"
               >
                 Apply
               </button>
@@ -477,12 +477,12 @@ function LeadsContent() {
 
           {/* Quick Tap Category Tabs (Osmo RO Dashboard: Paanifilter9@gmail.com) */}
           {isOsmoRo && (
-            <div className="grid grid-cols-4 gap-2 p-1.5 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+            <div className="grid grid-cols-4 gap-3 p-2 bg-white/70 dark:bg-gray-900/70 backdrop-blur-md rounded-2xl border border-white dark:border-gray-800/50 shadow-sm transition-all">
               {[
-                { id: 'unfiltered', label: 'Unfiltered', count: typeCounts.unfiltered, activeStyle: 'bg-slate-700 text-white shadow-sm shadow-slate-500/20' },
-                { id: 'osmo_dealer', label: 'Osmo Dealer', count: typeCounts.osmo_dealer, activeStyle: 'bg-purple-600 text-white shadow-sm shadow-purple-500/20' },
-                { id: 'dealer', label: 'Dealer', count: typeCounts.dealer, activeStyle: 'bg-amber-600 text-white shadow-sm shadow-amber-500/20' },
-                { id: 'customer', label: 'Customer', count: typeCounts.customer, activeStyle: 'bg-teal-600 text-white shadow-sm shadow-teal-500/20' },
+                { id: 'unfiltered', label: 'Unfiltered', count: typeCounts.unfiltered, activeStyle: 'bg-gradient-to-r from-slate-600 to-slate-700 text-white shadow-md shadow-slate-500/30' },
+                { id: 'osmo_dealer', label: 'Osmo Dealer', count: typeCounts.osmo_dealer, activeStyle: 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-md shadow-purple-500/30' },
+                { id: 'dealer', label: 'Dealer', count: typeCounts.dealer, activeStyle: 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/30' },
+                { id: 'customer', label: 'Customer', count: typeCounts.customer, activeStyle: 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-md shadow-teal-500/30' },
               ].map((tab) => {
                 const active = leadTypeFilter === tab.id
                 return (
@@ -490,17 +490,17 @@ function LeadsContent() {
                     key={tab.id}
                     type="button"
                     onClick={() => setLeadTypeFilter(tab.id)}
-                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all duration-200 select-none cursor-pointer ${
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-[11px] uppercase tracking-wider font-black transition-all duration-300 select-none cursor-pointer ${
                       active
                         ? tab.activeStyle
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/50 dark:hover:bg-gray-800/50'
                     }`}
                   >
                     <span>{tab.label}</span>
-                    <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                    <span className={`text-[10px] px-2 py-0.5 rounded-lg font-black ${
                       active && tab.id !== 'all'
-                        ? 'bg-white/20 text-white'
-                        : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                        ? 'bg-white/25 text-white shadow-inner'
+                        : 'bg-gray-200/50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-300'
                     }`}>
                       {tab.count}
                     </span>
@@ -511,7 +511,7 @@ function LeadsContent() {
           )}
 
           {/* CRM Leads Table */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden flex-1 flex flex-col min-h-[350px]">
+          <div className="bg-white/70 dark:bg-gray-900/70 backdrop-blur-md rounded-2xl border border-white/50 dark:border-gray-800/50 shadow-sm overflow-hidden flex-1 flex flex-col min-h-[350px] transition-all relative">
             {loading ? (
               <div className="flex-1 flex flex-col items-center justify-center p-12">
                 <RefreshCw className="w-8 h-8 text-emerald-500 animate-spin mb-2" />
@@ -597,19 +597,19 @@ function LeadsContent() {
               return (
                 <div className="overflow-x-auto flex-1 pb-4">
                   <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-                    <thead className="bg-gray-50 dark:bg-gray-950 text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider text-left uppercase sticky top-0 z-20">
+                    <thead className="bg-emerald-50/50 dark:bg-emerald-950/30 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 tracking-widest text-left uppercase sticky top-0 z-20 backdrop-blur-md">
                       <tr>
-                        <th className="px-6 py-3 whitespace-nowrap sticky left-0 bg-gray-50 dark:bg-gray-950 z-30 shadow-[inset_-1px_0_0_0_#e5e7eb] dark:shadow-[inset_-1px_0_0_0_#1f2937]">Lead Contact</th>
+                        <th className="px-6 py-4 whitespace-nowrap sticky left-0 bg-emerald-50/90 dark:bg-emerald-950/90 backdrop-blur-xl z-30 shadow-[inset_-1px_0_0_0_rgba(16,185,129,0.2)] dark:shadow-[inset_-1px_0_0_0_rgba(16,185,129,0.1)]">Lead Contact</th>
                         {uniqueCustomKeys.map(key => (
-                          <th key={key} className="px-6 py-3 whitespace-nowrap">
+                          <th key={key} className="px-6 py-4 whitespace-nowrap">
                             {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </th>
                         ))}
-                        <th className="px-6 py-3 whitespace-nowrap">Date Added</th>
-                        <th className="px-6 py-3 text-right whitespace-nowrap sticky right-0 bg-gray-50 dark:bg-gray-950 z-30 shadow-[inset_1px_0_0_0_#e5e7eb] dark:shadow-[inset_1px_0_0_0_#1f2937]">Actions</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Date Added</th>
+                        <th className="px-6 py-4 text-right whitespace-nowrap sticky right-0 bg-emerald-50/90 dark:bg-emerald-950/90 backdrop-blur-xl z-30 shadow-[inset_1px_0_0_0_rgba(16,185,129,0.2)] dark:shadow-[inset_1px_0_0_0_rgba(16,185,129,0.1)]">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60 text-sm">
                       {displayedLeads.map((lead) => {
                         let rawFollowup = lead.followup_notes || '';
                         if (rawFollowup.includes('Scheduled Meeting')) {
@@ -642,11 +642,11 @@ function LeadsContent() {
                         return (
                           <tr 
                             key={lead.id} 
-                            className="group hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
+                            className="group hover:bg-emerald-50/40 dark:hover:bg-emerald-900/10 transition-all cursor-pointer relative"
                             onClick={() => handleViewLead(lead)}
                           >
-                            <td className="px-6 py-4 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-gray-900/50 transition-colors z-10 shadow-[inset_-1px_0_0_0_#f3f4f6] dark:shadow-[inset_-1px_0_0_0_#1f2937]">
-                              <div className="font-semibold text-gray-950 dark:text-white flex items-center gap-2">
+                            <td className="px-6 py-4 whitespace-nowrap sticky left-0 bg-white/40 dark:bg-gray-900/40 backdrop-blur-xl group-hover:bg-emerald-50/60 dark:group-hover:bg-emerald-900/20 transition-colors z-10 shadow-[inset_-1px_0_0_0_#f3f4f6] dark:shadow-[inset_-1px_0_0_0_#1f2937]">
+                              <div className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                 <span>{displayName}</span>
                                 {isOsmoRo && (
                                   <div className="relative inline-flex items-center ml-1" onClick={(e) => e.stopPropagation()}>
@@ -744,12 +744,13 @@ function LeadsContent() {
                                 {new Date(lead.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-xs sticky right-0 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-gray-900/50 transition-colors z-10 shadow-[inset_1px_0_0_0_#f3f4f6] dark:shadow-[inset_1px_0_0_0_#1f2937]" onClick={(e) => e.stopPropagation()}>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-xs sticky right-0 bg-white/40 dark:bg-gray-900/40 backdrop-blur-xl group-hover:bg-emerald-50/60 dark:group-hover:bg-emerald-900/20 transition-colors z-10 shadow-[inset_1px_0_0_0_#f3f4f6] dark:shadow-[inset_1px_0_0_0_#1f2937]" onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={() => handleViewLead(lead)}
-                                className="px-2.5 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 rounded border border-emerald-200 dark:border-emerald-900/50 font-semibold"
+                                className="px-4 py-1.5 bg-white dark:bg-gray-800 text-emerald-600 hover:text-white hover:bg-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-500 dark:hover:text-white rounded-lg border border-emerald-200 dark:border-emerald-800/50 font-bold shadow-sm transition-all duration-300 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 flex items-center gap-1 ml-auto"
                               >
-                                Details
+                                <Eye className="w-3.5 h-3.5" />
+                                View
                               </button>
                             </td>
                           </tr>
@@ -766,35 +767,35 @@ function LeadsContent() {
 
         {/* Lead details Drawer (Opens on Right side) */}
         {activeLead && (
-          <div className="absolute inset-0 bg-black/40 z-30 flex justify-end transition-opacity duration-300">
+          <div className="absolute inset-0 bg-black/30 dark:bg-black/50 backdrop-blur-md z-30 flex justify-end transition-opacity duration-300">
             {/* Click outside to close */}
-            <div className="flex-1" onClick={() => setActiveLead(null)} />
+            <div className="flex-1 cursor-pointer" onClick={() => setActiveLead(null)} />
             
-            <div className="w-full max-w-md bg-white dark:bg-gray-900 h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-800 animate-slide-in overflow-hidden">
+            <div className="w-full max-w-md bg-white/95 dark:bg-gray-950/95 backdrop-blur-2xl h-full shadow-2xl flex flex-col border-l border-white/20 dark:border-gray-800/50 rounded-l-3xl animate-slide-in overflow-hidden">
               
               {/* Drawer Header */}
-              <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
-                    <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <div className="p-5 border-b border-gray-200/60 dark:border-gray-800/60 bg-transparent flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/20 flex items-center justify-center">
+                    <User className="w-5 h-5 text-white" />
                   </div>
-                  <span className="font-bold text-gray-900 dark:text-white">Lead Summary</span>
+                  <span className="font-black tracking-tight text-gray-900 dark:text-white text-lg">Lead Summary</span>
                 </div>
                 <button 
                   onClick={() => setActiveLead(null)}
-                  className="p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600"
+                  className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              <div className="flex-1 overflow-y-auto p-6 space-y-8 hide-scrollbar">
                 
                 {/* Details Section */}
-                <div className="space-y-3">
-                  <div className="text-center pb-4 border-b border-gray-100 dark:border-gray-800">
-                    <h3 className="text-lg font-bold text-gray-950 dark:text-white">{activeLead.name || 'Unknown'}</h3>
+                <div className="space-y-4">
+                  <div className="text-center pb-5 border-b border-gray-100 dark:border-gray-800/50">
+                    <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{activeLead.name || 'Unknown'}</h3>
                     <p className="text-sm text-gray-500 flex items-center justify-center gap-1.5 mt-1 font-mono">
                       <Phone className="w-3.5 h-3.5" />
                       {activeLead.phone_number}
@@ -802,13 +803,13 @@ function LeadsContent() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
-                    <div className="p-3 bg-gray-50 dark:bg-gray-950 rounded-xl border border-gray-200/60 dark:border-gray-800/60">
-                      <span className="text-[10px] uppercase font-bold text-gray-400">Database ID</span>
-                      <p className="text-xs text-gray-700 dark:text-gray-300 font-mono truncate mt-0.5">{activeLead.id}</p>
+                    <div className="p-3 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/60 dark:border-gray-800/60 shadow-sm">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Database ID</span>
+                      <p className="text-xs text-gray-900 dark:text-gray-100 font-mono truncate mt-1">{activeLead.id}</p>
                     </div>
-                    <div className="p-3 bg-gray-50 dark:bg-gray-950 rounded-xl border border-gray-200/60 dark:border-gray-800/60">
-                      <span className="text-[10px] uppercase font-bold text-gray-400">Created Date</span>
-                      <p className="text-xs text-gray-700 dark:text-gray-300 mt-0.5">
+                    <div className="p-3 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/60 dark:border-gray-800/60 shadow-sm">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Created Date</span>
+                      <p className="text-xs text-gray-900 dark:text-gray-100 font-medium mt-1">
                         {new Date(activeLead.created_at).toLocaleDateString()}
                       </p>
                     </div>
@@ -816,8 +817,8 @@ function LeadsContent() {
                 </div>
 
                 {/* Edit Section */}
-                <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner">
-                  <h4 className="text-xs font-bold uppercase text-gray-400 tracking-wider">CRM Management</h4>
+                <div className="space-y-5 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200/80 dark:border-gray-800/80 shadow-xl shadow-gray-200/20 dark:shadow-black/40">
+                  <h4 className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">CRM Management</h4>
 
                   <div className="space-y-3">
                     {/* Stage selector */}
@@ -890,13 +891,13 @@ function LeadsContent() {
                       No custom fields found.
                     </p>
                   ) : (
-                    <div className="grid grid-cols-1 gap-2.5">
+                    <div className="grid grid-cols-1 gap-3">
                       {Object.entries(activeLead.metadata || {}).map(([key, val]) => {
                         const formattedLabel = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
                         return (
                           <div 
                             key={key} 
-                            className="p-3 bg-white dark:bg-gray-950 rounded-xl border border-gray-200/70 dark:border-gray-800/70 shadow-sm flex items-center justify-between"
+                            className="p-4 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/50 dark:border-gray-800/50 shadow-sm flex items-center justify-between hover:bg-white dark:hover:bg-gray-900 transition-colors"
                           >
                             <div>
                               <span className="text-[10px] text-gray-400 block font-semibold">{formattedLabel}</span>
@@ -914,10 +915,10 @@ function LeadsContent() {
               </div>
 
               {/* Drawer Footer Actions */}
-              <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex gap-2 shrink-0">
+              <div className="p-5 border-t border-gray-200/60 dark:border-gray-800/60 bg-white/50 dark:bg-gray-950/50 backdrop-blur-md flex gap-3 shrink-0">
                 <Link
                   href={`/dashboard?phone=${activeLead.phone_number}`}
-                  className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow transition-all"
+                  className="flex-1 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-sm font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all"
                 >
                   <MessageSquare className="w-4 h-4" />
                   Open Conversation Chat
@@ -932,11 +933,20 @@ function LeadsContent() {
   )
 }
 
-function MetricCard({ label, value, color }: { label: string; value: number; color: string }) {
+function MetricCard({ label, value, bgGradient, shadowColor, icon }: { label: string; value: number; bgGradient: string; shadowColor: string; icon: React.ReactNode }) {
   return (
-    <div className={`p-4 bg-white dark:bg-gray-900 rounded-xl border-l-4 ${color} border border-gray-200 dark:border-gray-800 shadow-sm`}>
-      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">{label}</span>
-      <span className="text-2xl font-black mt-1 block">{value}</span>
+    <div className={`relative overflow-hidden p-5 rounded-2xl bg-gradient-to-br ${bgGradient} shadow-lg ${shadowColor} hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-white flex flex-col justify-between`}>
+      {/* Abstract glass overlay */}
+      <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -left-6 -bottom-6 w-20 h-20 bg-black/10 rounded-full blur-xl pointer-events-none" />
+      
+      <div className="relative z-10 flex items-center justify-between">
+        <span className="text-xs uppercase font-bold text-white/80 tracking-widest">{label}</span>
+        <div className="p-1.5 bg-white/20 rounded-xl backdrop-blur-sm">
+          {icon}
+        </div>
+      </div>
+      <span className="relative z-10 text-3xl font-black mt-2 tracking-tight">{value}</span>
     </div>
   )
 }
