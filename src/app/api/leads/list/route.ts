@@ -44,11 +44,12 @@ export async function GET(req: NextRequest) {
 
     const convsQuery = supabaseAdmin
       .from('conversations')
-      .select('id, phone_number, metadata, last_message, notes, summary')
+      .select('id, phone_number, metadata, last_message, notes')
       .eq('org_id', orgId)
 
     const [leadsRes, convsRes] = await Promise.all([leadsQuery, convsQuery])
     if (leadsRes.error) throw leadsRes.error
+    if (convsRes.error) console.error('[leads-list] convsQuery error:', convsRes.error)
 
     const allLeads = leadsRes.data || []
     const convsData = convsRes.data || []
@@ -110,9 +111,6 @@ export async function GET(req: NextRequest) {
       }
       if (matchedConv.notes) {
         parsedMetadata.notes = matchedConv.notes
-      }
-      if (matchedConv.summary) {
-        parsedMetadata.summary = matchedConv.summary
       }
 
       const score = Number(parsedMetadata.lead_score ?? lead.lead_score) || 0;
