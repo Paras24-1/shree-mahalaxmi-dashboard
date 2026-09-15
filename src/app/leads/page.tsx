@@ -111,6 +111,14 @@ function LeadsContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
+  // Pagination
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  // Stats
+  const [stats, setStats] = useState({ total: 0, unfiltered: 0, osmo_dealer: 0, dealer: 0, customer: 0 })
+  
   // Filters
   const [search, setSearch] = useState('')
   const [selectedStage, setSelectedStage] = useState('')
@@ -129,36 +137,35 @@ function LeadsContent() {
   const [editCategory, setEditCategory] = useState('unfiltered')
   const [savingLead, setSavingLead] = useState(false)
 
-  // Calculate live count per lead type category for Osmo RO
-  const typeCounts = useMemo(() => {
-    let unfiltered = 0
-    let osmo_dealer = 0
-    let dealer = 0
-    let customer = 0
+  // Stats loaded from server
+  const typeCounts = {
+    unfiltered: stats.unfiltered,
+    osmo_dealer: stats.osmo_dealer,
+    dealer: stats.dealer,
+    customer: stats.customer,
+  }
 
-    leads.forEach((l) => {
-      const cat = classifyLead(l)
-      if (cat === 'osmo_dealer') {
-        osmo_dealer++
-      } else if (cat === 'dealer') {
-        dealer++
-      } else if (cat === 'customer') {
-        customer++
-      } else {
-        unfiltered++
+  const fetchStats = async (headers: any, params: URLSearchParams) => {
+    try {
+      const res = await fetch(`/api/leads/stats?${params.toString()}`, { headers, cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setStats(data)
       }
-    })
+    } catch (e) {
+      console.error('Failed to fetch stats', e)
+    }
+  }
 
-    return { unfiltered, osmo_dealer, dealer, customer }
-  }, [leads])
-
-  useEffect(() => {
-    fetchLeads()
-  }, [selectedStage, selectedQuality, startDate, endDate])
-
-  const fetchLeads = async () => {
-    setLoading(true)
+  const fetchLeads = async (loadMore = false) => {
+    if (loadMore) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+      setPage(1)
+    }
     setError(null)
+    
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token || ''
@@ -170,22 +177,44 @@ function LeadsContent() {
       if (search) params.set('search', search)
       if (startDate) params.set('start_date', startDate)
       if (endDate) params.set('end_date', endDate)
+      if (leadTypeFilter !== 'all') params.set('lead_type', leadTypeFilter)
+
+      if (!loadMore) {
+        // Fetch stats only on fresh load/filter change
+        fetchStats(headers, params)
+      }
+
+      const currentPage = loadMore ? page + 1 : 1
+      params.set('page', currentPage.toString())
+      params.set('limit', '50')
 
       const res = await fetch(`/api/leads/list?${params}`, { headers, cache: 'no-store' })
       if (!res.ok) throw new Error('Failed to fetch leads list')
-      const data = await res.json()
-      setLeads(data)
+      const { data, hasMore: more } = await res.json()
+      
+      if (loadMore) {
+        setLeads(prev => [...prev, ...data])
+        setPage(currentPage)
+      } else {
+        setLeads(data)
+      }
+      setHasMore(more)
     } catch (err: any) {
       console.error(err)
       setError(err.message || 'An error occurred while loading leads.')
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
+  useEffect(() => {
+    fetchLeads(false)
+  }, [selectedStage, selectedQuality, startDate, endDate, leadTypeFilter])
+
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      fetchLeads()
+      fetchLeads(false)
     }
   }
 
@@ -343,24 +372,11 @@ function LeadsContent() {
     document.body.removeChild(link)
   }
 
-  // Lead Counts (reads score/temperature dynamically from metadata first)
-  const totalLeads = leads.length
-  const hotLeads = leads.filter(l => {
-    let meta = l.metadata || {};
-    if (typeof meta === 'string') { try { meta = JSON.parse(meta) } catch (e) {} }
-    const score = Number(meta.lead_score ?? l.lead_score) || 0;
-    const temp = (meta.lead_temperature || meta.lead_quality || (score >= 70 ? 'hot' : score >= 40 ? 'warm' : l.lead_temperature || l.lead_quality || '')).toLowerCase();
-    return score >= 70 || temp === 'hot';
-  }).length
-
-  const warmLeads = leads.filter(l => {
-    let meta = l.metadata || {};
-    if (typeof meta === 'string') { try { meta = JSON.parse(meta) } catch (e) {} }
-    const score = Number(meta.lead_score ?? l.lead_score) || 0;
-    const temp = (meta.lead_temperature || meta.lead_quality || (score >= 70 ? 'hot' : score >= 40 ? 'warm' : l.lead_temperature || l.lead_quality || '')).toLowerCase();
-    return (score >= 40 && score < 70) || temp === 'warm';
-  }).length
-
+  // Use stats from server for accurate total count
+  const totalLeads = stats.total
+  // Hot/Warm currently only calculated on the current page to save DB queries
+  const hotLeads = leads.filter(l => (l.lead_quality || '').toLowerCase() === 'hot' || (l.lead_temperature || '').toLowerCase() === 'hot').length
+  const warmLeads = leads.filter(l => (l.lead_quality || '').toLowerCase() === 'warm' || (l.lead_temperature || '').toLowerCase() === 'warm').length
   const followupLeads = leads.filter(l => l.stage === 'followup' || !!l.followup_date).length
 
   return (
@@ -467,7 +483,7 @@ function LeadsContent() {
               </div>
 
               <button
-                onClick={fetchLeads}
+                onClick={() => fetchLeads(false)}
                 className="hidden md:flex items-center justify-center gap-1.5 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/20 hover:shadow-lg hover:-translate-y-0.5"
               >
                 Apply
@@ -521,7 +537,7 @@ function LeadsContent() {
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-red-500">
                 <AlertCircle className="w-10 h-10 mb-2" />
                 <p className="text-sm text-gray-700 dark:text-gray-300 font-semibold">{error}</p>
-                <button onClick={fetchLeads} className="mt-3 px-4 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg transition-colors border border-red-200">
+                <button onClick={() => fetchLeads(false)} className="mt-3 px-4 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg transition-colors border border-red-200">
                   Try Again
                 </button>
               </div>
@@ -532,11 +548,7 @@ function LeadsContent() {
                 <p className="text-xs text-gray-500 mt-1 max-w-xs">Adjust your search parameters or check your n8n workflow connections.</p>
               </div>
             ) : (() => {
-              const displayedLeads = leads.filter((lead) => {
-                if (!isOsmoRo || leadTypeFilter === 'all') return true
-                const cat = classifyLead(lead)
-                return cat === leadTypeFilter
-              })
+              const displayedLeads = leads // Server handles filtering now
 
               if (displayedLeads.length === 0) {
                 return (
@@ -758,6 +770,22 @@ function LeadsContent() {
                       })}
                     </tbody>
                   </table>
+                  
+                  {hasMore && (
+                    <div className="flex justify-center p-4 pt-6 pb-8 border-t border-gray-100 dark:border-gray-800/60 relative">
+                      <button 
+                        onClick={() => fetchLeads(true)}
+                        disabled={loadingMore}
+                        className="px-6 py-2.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold text-sm rounded-xl border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50"
+                      >
+                        {loadingMore ? (
+                          <><RefreshCw className="w-4 h-4 animate-spin" /> Loading...</>
+                        ) : (
+                          'Load More Leads'
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })()}

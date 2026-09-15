@@ -17,13 +17,20 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || ''
     const startDate = searchParams.get('start_date') || ''
     const endDate = searchParams.get('end_date') || ''
+    const leadType = searchParams.get('lead_type') || ''
+    
+    // Pagination (default to page 1, 50 items per page)
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const limit = parseInt(searchParams.get('limit') || '50', 10)
+    const from = (page - 1) * limit
+    const to = from + limit - 1
 
     let leadsQuery = supabaseAdmin
       .from('leads')
       .select('*')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
-      .limit(10000)
+      .range(from, to)
 
     if (isStaffEmployee) {
       leadsQuery = leadsQuery.eq('assigned_to', userId)
@@ -41,34 +48,22 @@ export async function GET(req: NextRequest) {
     if (endDate) {
       leadsQuery = leadsQuery.lte('created_at', `${endDate}T23:59:59.999Z`)
     }
+    if (search) {
+      leadsQuery = leadsQuery.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%,customer_name.ilike.%${search}%`)
+    }
+    if (leadType && leadType !== 'all') {
+      if (leadType === 'unfiltered') {
+        leadsQuery = leadsQuery.or('metadata->>lead_type.eq.unfiltered,metadata->>lead_type.is.null')
+      } else {
+        leadsQuery = leadsQuery.eq('metadata->>lead_type', leadType)
+      }
+    }
 
-    const convsQuery = supabaseAdmin
-      .from('conversations')
-      .select('id, phone_number, metadata, last_message, notes')
-      .eq('org_id', orgId)
+    const { data: allLeads, error: leadsError } = await leadsQuery
+    if (leadsError) throw leadsError
 
-    const [leadsRes, convsRes] = await Promise.all([leadsQuery, convsQuery])
-    if (leadsRes.error) throw leadsRes.error
-    if (convsRes.error) console.error('[leads-list] convsQuery error:', convsRes.error)
-
-    const allLeads = leadsRes.data || []
-    const convsData = convsRes.data || []
-
-    const convMapById = new Map<string, any>()
-    const convMapByPhone = new Map<string, any>()
-
-    if (Array.isArray(convsData)) {
-      convsData.forEach((c) => {
-        let meta = c.metadata || {}
-        if (typeof meta === 'string') {
-          try { meta = JSON.parse(meta) } catch {}
-        }
-        // Attach conversation fields directly to the mapped object so we can use them later
-        const convObj = { ...c, metadata: meta }
-        if (c.id) convMapById.set(c.id, convObj)
-        const cleanPhone = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-        if (cleanPhone) convMapByPhone.set(cleanPhone, convObj)
-      })
+    if (!allLeads || allLeads.length === 0) {
+      return NextResponse.json({ data: [], hasMore: false })
     }
 
     // Safely parse metadata on each lead and flatten key fields for API consistency
@@ -84,81 +79,40 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const cleanPhone = (lead.phone_number || '').replace(/\D/g, '').slice(-10)
-      const matchedConv = (lead.conversation_id ? convMapById.get(lead.conversation_id) : null) ||
-        (cleanPhone ? convMapByPhone.get(cleanPhone) : null) || {}
-
-      const matchedConvMeta = matchedConv.metadata || {}
-
-      const leadType =
+      const lType =
         parsedMetadata.lead_type ||
-        parsedMetadata.Lead_Type ||
         parsedMetadata.category ||
         lead.lead_type ||
-        matchedConvMeta.lead_type ||
-        matchedConvMeta.Lead_Type ||
-        matchedConvMeta.category ||
-        ''
-
-      if (leadType) {
-        parsedMetadata.lead_type = leadType
-        parsedMetadata.category = leadType
-      }
-      
-      // Inject conversation fields into metadata so classifyOsmoContact can use them on the frontend
-      if (matchedConv.last_message) {
-        parsedMetadata.last_message = matchedConv.last_message
-      }
-      if (matchedConv.notes) {
-        parsedMetadata.notes = matchedConv.notes
-      }
+        'unfiltered'
 
       const score = Number(parsedMetadata.lead_score ?? lead.lead_score) || 0;
-      let quality = (parsedMetadata.lead_quality || parsedMetadata.lead_temperature || lead.lead_temperature || 'cold').toLowerCase();
-      if (score >= 70) quality = 'hot';
-      else if (score >= 40) quality = 'warm';
-      else if (score > 0) quality = 'cold';
+      let q = (parsedMetadata.lead_quality || parsedMetadata.lead_temperature || lead.lead_temperature || 'cold').toLowerCase();
+      if (score >= 70) q = 'hot';
+      else if (score >= 40) q = 'warm';
+      else if (score > 0) q = 'cold';
 
-      const stage = parsedMetadata.state || parsedMetadata.stage || lead.stage || 'new';
+      const stg = parsedMetadata.state || parsedMetadata.stage || lead.stage || 'new';
       const displayName = lead.name || lead.customer_name || parsedMetadata.Name || parsedMetadata.name || parsedMetadata.contact_person || parsedMetadata.customer_name || 'Unknown';
 
       return {
         ...lead,
-        ...parsedMetadata,
-        lead_type: leadType,
+        ...parsedMetadata, // flatten for frontend backward compatibility
+        lead_type: lType,
         name: displayName,
-        stage: stage,
-        lead_quality: quality,
-        lead_temperature: quality.toUpperCase(),
+        stage: stg,
+        lead_quality: q,
+        lead_temperature: q.toUpperCase(),
         lead_score: score,
-        metadata: parsedMetadata
+        metadata: parsedMetadata // keep nested metadata as well
       }
     })
 
-    let filteredLeads = parsedLeads
+    const hasMore = allLeads.length === limit
 
-    // In-memory search for maximum flexibility (searches metadata keys and values too)
-    if (search) {
-      const searchLower = search.toLowerCase()
-      filteredLeads = parsedLeads.filter((lead) => {
-        const nameMatch = (lead.name || '').toLowerCase().includes(searchLower)
-        const phoneMatch = (lead.phone_number || '').toLowerCase().includes(searchLower)
-        const stageMatch = (lead.stage || '').toLowerCase().includes(searchLower)
-        const qualityMatch = (lead.lead_quality || '').toLowerCase().includes(searchLower)
-
-        let metadataMatch = false
-        if (lead.metadata) {
-          metadataMatch = Object.entries(lead.metadata).some(([key, val]) =>
-            key.toLowerCase().includes(searchLower) ||
-            String(val).toLowerCase().includes(searchLower)
-          )
-        }
-
-        return nameMatch || phoneMatch || stageMatch || qualityMatch || metadataMatch
-      })
-    }
-
-    return NextResponse.json(filteredLeads)
+    return NextResponse.json({
+      data: parsedLeads,
+      hasMore
+    })
   } catch (err: unknown) {
     console.error('[leads-list]', err)
     const error = err instanceof Error ? err.message : 'Unknown error'
