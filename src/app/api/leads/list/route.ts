@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     const convsQuery = supabaseAdmin
       .from('conversations')
-      .select('id, phone_number, metadata')
+      .select('id, phone_number, metadata, last_message, notes, summary')
       .eq('org_id', orgId)
 
     const [leadsRes, convsRes] = await Promise.all([leadsQuery, convsQuery])
@@ -62,9 +62,11 @@ export async function GET(req: NextRequest) {
         if (typeof meta === 'string') {
           try { meta = JSON.parse(meta) } catch {}
         }
-        if (c.id) convMapById.set(c.id, meta)
+        // Attach conversation fields directly to the mapped object so we can use them later
+        const convObj = { ...c, metadata: meta }
+        if (c.id) convMapById.set(c.id, convObj)
         const cleanPhone = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-        if (cleanPhone) convMapByPhone.set(cleanPhone, meta)
+        if (cleanPhone) convMapByPhone.set(cleanPhone, convObj)
       })
     }
 
@@ -82,8 +84,10 @@ export async function GET(req: NextRequest) {
       }
 
       const cleanPhone = (lead.phone_number || '').replace(/\D/g, '').slice(-10)
-      const matchedConvMeta = (lead.conversation_id ? convMapById.get(lead.conversation_id) : null) ||
+      const matchedConv = (lead.conversation_id ? convMapById.get(lead.conversation_id) : null) ||
         (cleanPhone ? convMapByPhone.get(cleanPhone) : null) || {}
+
+      const matchedConvMeta = matchedConv.metadata || {}
 
       const leadType =
         parsedMetadata.lead_type ||
@@ -98,6 +102,17 @@ export async function GET(req: NextRequest) {
       if (leadType) {
         parsedMetadata.lead_type = leadType
         parsedMetadata.category = leadType
+      }
+      
+      // Inject conversation fields into metadata so classifyOsmoContact can use them on the frontend
+      if (matchedConv.last_message) {
+        parsedMetadata.last_message = matchedConv.last_message
+      }
+      if (matchedConv.notes) {
+        parsedMetadata.notes = matchedConv.notes
+      }
+      if (matchedConv.summary) {
+        parsedMetadata.summary = matchedConv.summary
       }
 
       const score = Number(parsedMetadata.lead_score ?? lead.lead_score) || 0;
