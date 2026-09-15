@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
-      .limit(1000)
+      .limit(10000)
 
     if (isStaffEmployee) {
       leadsQuery = leadsQuery.eq('assigned_to', userId)
