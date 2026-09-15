@@ -18,31 +18,12 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('start_date') || ''
     const endDate = searchParams.get('end_date') || ''
 
-    // Helper to fetch all pages for a query to bypass 1000 row max_rows limit
-    const fetchAll = async (query: any) => {
-      let allData: any[] = []
-      let from = 0
-      let step = 1000
-      let hasMore = true
-      while (hasMore) {
-        const { data, error } = await query.range(from, from + step - 1)
-        if (error) throw error
-        if (data && data.length > 0) {
-          allData = allData.concat(data)
-          from += step
-          if (data.length < step) hasMore = false
-        } else {
-          hasMore = false
-        }
-      }
-      return allData
-    }
-
     let leadsQuery = supabaseAdmin
       .from('leads')
       .select('*')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
+      .limit(10000)
 
     if (isStaffEmployee) {
       leadsQuery = leadsQuery.eq('assigned_to', userId)
@@ -66,10 +47,12 @@ export async function GET(req: NextRequest) {
       .select('id, phone_number, metadata, last_message, notes')
       .eq('org_id', orgId)
 
-    const [allLeads, convsData] = await Promise.all([
-      fetchAll(leadsQuery),
-      fetchAll(convsQuery)
-    ])
+    const [leadsRes, convsRes] = await Promise.all([leadsQuery, convsQuery])
+    if (leadsRes.error) throw leadsRes.error
+    if (convsRes.error) console.error('[leads-list] convsQuery error:', convsRes.error)
+
+    const allLeads = leadsRes.data || []
+    const convsData = convsRes.data || []
 
     const convMapById = new Map<string, any>()
     const convMapByPhone = new Map<string, any>()

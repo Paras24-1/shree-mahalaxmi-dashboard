@@ -16,26 +16,6 @@ export async function GET(req: NextRequest) {
     const assignedTo   = searchParams.get('assigned_to')   || ''
     const assignFilter = searchParams.get('assign_filter') || ''
 
-    // Helper to fetch all pages for a query to bypass 1000 row max_rows limit
-    const fetchAll = async (query: any) => {
-      let allData: any[] = []
-      let from = 0
-      let step = 1000
-      let hasMore = true
-      while (hasMore) {
-        const { data, error } = await query.range(from, from + step - 1)
-        if (error) throw error
-        if (data && data.length > 0) {
-          allData = allData.concat(data)
-          from += step
-          if (data.length < step) hasMore = false
-        } else {
-          hasMore = false
-        }
-      }
-      return allData
-    }
-
     let query = supabaseAdmin
       .from('conversations')
       .select('*, lead:leads(*)')
@@ -61,10 +41,11 @@ export async function GET(req: NextRequest) {
       .select('id, conversation_id, phone_number, name, lead_type, stage, lead_quality, lead_score, lead_temperature, metadata')
       .eq('org_id', orgId)
 
-    const [data, leadsData] = await Promise.all([
-      fetchAll(query),
-      fetchAll(leadsQuery)
-    ])
+    const [convRes, leadsRes] = await Promise.all([query, leadsQuery])
+    if (convRes.error) throw convRes.error
+
+    const data = convRes.data || []
+    const leadsData = leadsRes.data || []
 
     const leadsByConvId = new Map<string, any>()
     const leadsByPhone = new Map<string, any>()
