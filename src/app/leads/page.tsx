@@ -135,6 +135,7 @@ function LeadsContent() {
   const [editQuality, setEditQuality] = useState('')
   const [editScore, setEditScore] = useState(0)
   const [editCategory, setEditCategory] = useState('unfiltered')
+  const [editState, setEditState] = useState('')
   const [savingLead, setSavingLead] = useState(false)
 
   // Stats loaded from server
@@ -276,7 +277,8 @@ function LeadsContent() {
         stage: editStage,
         lead_quality: editQuality || null,
         lead_score: editScore,
-        lead_type: editCategory
+        lead_type: editCategory,
+        state: editState
       }
 
       const res = await fetch('/api/leads', {
@@ -288,7 +290,7 @@ function LeadsContent() {
       if (!res.ok) throw new Error('Failed to update lead')
       
       const currentMeta = typeof activeLead.metadata === 'string' ? JSON.parse(activeLead.metadata || '{}') : (activeLead.metadata || {})
-      const mergedMeta = { ...currentMeta, lead_type: editCategory, category: editCategory }
+      const mergedMeta = { ...currentMeta, lead_type: editCategory, category: editCategory, state: editState }
       
       // Update local state list
       setLeads(prev => prev.map(l => (l.id === activeLead.id || (l.phone_number && activeLead.phone_number && l.phone_number === activeLead.phone_number)) ? { ...l, ...updates, metadata: mergedMeta } : l))
@@ -306,7 +308,7 @@ function LeadsContent() {
     let meta = (lead.metadata || {}) as Record<string, any>;
     if (typeof meta === 'string') { try { meta = JSON.parse(meta) } catch (e) { meta = {} } }
     const score = Number(meta.lead_score ?? lead.lead_score) || 0;
-    const stage = meta.state || meta.stage || lead.stage || 'new';
+    const stage = meta.stage || lead.stage || 'new';
     const quality = meta.lead_quality || (score >= 70 ? 'hot' : score >= 40 ? 'warm' : score > 0 ? 'cold' : lead.lead_quality || 'unknown');
     
     setActiveLead({ ...lead, metadata: meta })
@@ -314,6 +316,7 @@ function LeadsContent() {
     setEditQuality(quality)
     setEditScore(score)
     setEditCategory(classifyLead(lead))
+    setEditState(meta.state || '')
   }
 
   // Download filtered leads as CSV
@@ -345,7 +348,7 @@ function LeadsContent() {
       if (typeof meta === 'string') { try { meta = JSON.parse(meta) } catch (e) {} }
       const score = Number(meta.lead_score ?? l.lead_score) || 0;
       const quality = meta.lead_quality || (score >= 70 ? 'hot' : score >= 40 ? 'warm' : score > 0 ? 'cold' : l.lead_quality || 'unknown');
-      const stage = meta.state || meta.stage || l.stage || 'new';
+      const stage = meta.stage || l.stage || 'new';
 
       const row = [
         l.name || (l as any).customer_name || meta.name || meta.contact_person || 'Unknown',
@@ -879,21 +882,33 @@ function LeadsContent() {
                       </select>
                     </div>
 
-                    {/* Category selector (Osmo RO only) */}
+                    {/* Category & State (Osmo RO only) */}
                     {isOsmoRo && (
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Lead Category</label>
-                        <select
-                          value={editCategory}
-                          onChange={(e) => setEditCategory(e.target.value)}
-                          className="w-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 rounded-lg text-sm focus:outline-none font-semibold text-gray-900 dark:text-white"
-                        >
-                          <option value="unfiltered">⚪ Unfiltered (Undefined)</option>
-                          <option value="osmo_dealer">🟣 Osmo Dealer</option>
-                          <option value="dealer">🟠 Dealer / Retailer</option>
-                          <option value="customer">🟢 Customer</option>
-                        </select>
-                      </div>
+                      <>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">Lead Category</label>
+                          <select
+                            value={editCategory}
+                            onChange={(e) => setEditCategory(e.target.value)}
+                            className="w-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 rounded-lg text-sm focus:outline-none font-semibold text-gray-900 dark:text-white"
+                          >
+                            <option value="unfiltered">⚪ Unfiltered (Undefined)</option>
+                            <option value="osmo_dealer">🟣 Osmo Dealer</option>
+                            <option value="dealer">🟠 Dealer / Retailer</option>
+                            <option value="customer">🟢 Customer</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">Geographic State</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Maharashtra, Delhi"
+                            value={editState}
+                            onChange={(e) => setEditState(e.target.value)}
+                            className="w-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 rounded-lg text-sm focus:outline-none"
+                          />
+                        </div>
+                      </>
                     )}
                   </div>
 

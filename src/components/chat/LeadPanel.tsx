@@ -34,12 +34,71 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
 
   const [leadCategory, setLeadCategory] = useState<string>('unfiltered')
   const [savingCategory, setSavingCategory] = useState(false)
+  const [leadState, setLeadState] = useState<string>('')
+  const [savingState, setSavingState] = useState(false)
 
   useEffect(() => {
     if (conversation || lead) {
       setLeadCategory(classifyOsmoContact(conversation || lead))
+      const meta = (lead || conversation)?.metadata;
+      let stateVal = '';
+      if (typeof meta === 'string') {
+        try { stateVal = JSON.parse(meta).state || '' } catch(e) {}
+      } else if (meta && typeof meta === 'object') {
+        stateVal = (meta as any).state || '';
+      }
+      setLeadState(stateVal);
     }
   }, [conversation?.id, (conversation as any)?.metadata, conversation?.lead_type, lead?.metadata, lead?.lead_type])
+
+  const handleStateSave = async (newState: string) => {
+    if (!conversation && !lead) return
+    setSavingState(true)
+
+    if (conversation) {
+      if (conversation.metadata && typeof conversation.metadata === 'object') {
+        conversation.metadata.state = newState
+      } else {
+        conversation.metadata = { state: newState }
+      }
+    }
+
+    if (lead) {
+      const currentMeta = typeof lead.metadata === 'string' ? JSON.parse(lead.metadata || '{}') : (lead.metadata || {})
+      onLeadUpdate({
+        metadata: {
+          ...currentMeta,
+          state: newState
+        }
+      })
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const convId = conversation?.id || lead?.conversation_id
+      const token = session?.access_token || ''
+      const authHeader: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+
+      await fetch(`/api/leads`, {
+        method: 'PATCH',
+        headers: authHeader,
+        body: JSON.stringify({
+          id: lead?.id,
+          conversation_id: convId,
+          phone_number: lead?.phone_number || conversation?.phone_number,
+          state: newState
+        })
+      })
+
+    } catch (err) {
+      console.error('Failed to change state:', err)
+    } finally {
+      setSavingState(false)
+    }
+  }
 
   const handleCategoryChange = async (newCategory: string) => {
     if (!conversation && !lead) return
@@ -643,6 +702,28 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
                     <option value="dealer">🟠 Dealer</option>
                     <option value="customer">🟢 Customer</option>
                   </select>
+                </div>
+                
+                <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-100 dark:border-gray-800/50">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-emerald-500 border border-gray-150 dark:border-gray-700/55 shadow-inner shrink-0">
+                      <MapPin className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-bold text-gray-500 dark:text-gray-400">Geographic State</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Delhi"
+                      value={leadState}
+                      onChange={(e) => setLeadState(e.target.value)}
+                      onBlur={() => handleStateSave(leadState)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleStateSave(leadState) }}
+                      disabled={savingState}
+                      className="w-28 text-[10px] uppercase font-bold tracking-wider px-2 py-1.5 rounded-lg border bg-gray-50 text-gray-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50 dark:bg-gray-800 dark:text-white dark:border-gray-700"
+                    />
+                    {savingState && <RefreshCw className="w-3 h-3 animate-spin text-emerald-500 shrink-0" />}
+                  </div>
                 </div>
               </div>
             ) : data.Lead_Type ? (
