@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Conversation, Stage } from '@/types'
 import { useConversations } from '@/hooks'
 import { formatDistanceToNow } from 'date-fns'
@@ -67,6 +67,9 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [deleting, setDeleting] = useState(false)
   const [showAddLead, setShowAddLead] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
+  // Local override map: convId -> category. Used for instant UI updates after category assignment.
+  // This takes priority over the DB-derived classification until a full refetch happens.
+  const [localCategoryOverrides, setLocalCategoryOverrides] = useState<Record<string, OsmoLeadCategory>>({})
   const { profile, org } = useOrg()
   const isOsmoRo = 
     profile?.email?.toLowerCase() === 'paanifilter9@gmail.com' ||
@@ -84,6 +87,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     userRole: profile?.role,
   })
 
+
   // Calculate live count per lead type category for Osmo RO
   const typeCounts = useMemo(() => {
     let unfiltered = 0
@@ -92,7 +96,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     let customer = 0
 
     conversations.forEach((c) => {
-      const cat = classifyLeadType(c)
+      const cat = localCategoryOverrides[c.id] ?? classifyLeadType(c)
       if (cat === 'osmo_dealer') {
         osmo_dealer++
       } else if (cat === 'dealer') {
@@ -105,7 +109,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
     })
 
     return { unfiltered, osmo_dealer, dealer, customer }
-  }, [conversations])
+  }, [conversations, localCategoryOverrides])
 
   useEffect(() => {
     if (profile?.role === 'admin' || profile?.role === 'owner') {
@@ -345,7 +349,7 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
             })
             .filter((c) => {
               if (!isOsmoRo || leadTypeFilter === 'all') return true
-              const cat = classifyLeadType(c)
+              const cat = localCategoryOverrides[c.id] ?? classifyLeadType(c)
               return cat === leadTypeFilter
             })
             .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
@@ -359,6 +363,8 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
                 isAdmin={isAdmin}
                 employees={employees}
                 onAssignmentChange={refetch}
+                onCategoryChange={(convId, cat) => setLocalCategoryOverrides(prev => ({ ...prev, [convId]: cat }))}
+                effectiveCategory={localCategoryOverrides[conv.id] ?? classifyLeadType(conv)}
                 isOsmoRo={isOsmoRo}
               />
             ))
@@ -376,22 +382,26 @@ function ConversationItem({
   isAdmin,
   employees,
   onAssignmentChange,
+  onCategoryChange,
+  effectiveCategory,
   isOsmoRo,
 }: {
-  conversation: Conversation
+  conversation: Conversation,
   isSelected: boolean
   onClick: () => void
   onDelete: (e: React.MouseEvent) => void
   isAdmin: boolean
   employees: Employee[]
   onAssignmentChange: () => void
+  onCategoryChange: (convId: string, cat: OsmoLeadCategory) => void
+  effectiveCategory: OsmoLeadCategory
   isOsmoRo?: boolean
 }) {
   const [hovered, setHovered] = useState(false)
   const [showAssign, setShowAssign] = useState(false)
   const [assigning, setAssigning] = useState(false)
 
-  const leadCat = classifyLeadType(conv)
+  const leadCat = effectiveCategory
   let displayType = ''
   let typeBadgeColor = ''
 
@@ -414,40 +424,37 @@ function ConversationItem({
   const handleCategorySelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     e.stopPropagation()
     const newCat = e.target.value as OsmoLeadCategory
+    if (updatingCat) return
+    setUpdatingCat(true)
 
-    // Instant optimistic update
-    conv.lead_type = newCat
-    if (conv.metadata && typeof conv.metadata === 'object') {
-      conv.metadata.lead_type = newCat
-      conv.metadata.category = newCat
-    } else {
-      conv.metadata = { lead_type: newCat, category: newCat }
-    }
-    if (conv.lead) {
-      const leadObj = Array.isArray(conv.lead) ? conv.lead[0] : conv.lead
-      if (leadObj) {
-        leadObj.lead_type = newCat
-        if (leadObj.metadata && typeof leadObj.metadata === 'object') {
-          leadObj.metadata.lead_type = newCat
-          leadObj.metadata.category = newCat
-        }
-      }
-    }
-    onAssignmentChange()
+    // 1. Immediately update local override so UI reflects change right away
+    onCategoryChange(conv.id, newCat)
 
-    // Background sync
+    // 2. Await the actual API call so we know if it succeeded
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      fetch(`/api/conversations/${conv.id}`, {
+      const res = await fetch(`/api/conversations/${conv.id}`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
           ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
         },
         body: JSON.stringify({ lead_type: newCat })
-      }).catch(console.error)
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        console.error('Category save failed:', res.status, errBody)
+        // Revert the override if API failed
+        onCategoryChange(conv.id, classifyLeadType(conv))
+      } else {
+        // 3. After DB confirmed, do a background refetch so data is fresh
+        setTimeout(() => onAssignmentChange(), 1500)
+      }
     } catch (err) {
       console.error('Failed to change category:', err)
+      onCategoryChange(conv.id, classifyLeadType(conv))
+    } finally {
+      setUpdatingCat(false)
     }
   }
 
