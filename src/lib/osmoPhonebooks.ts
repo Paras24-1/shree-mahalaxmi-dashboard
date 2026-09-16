@@ -225,7 +225,7 @@ export async function fetchUnifiedOsmoContacts(orgId: string) {
   while (true) {
     const { data, error } = await supabaseAdmin
       .from('conversations')
-      .select('id, phone_number, name, stage, last_message, notes, assigned_to, unread_count, updated_at, created_at, metadata')
+      .select('*')
       .eq('org_id', orgId)
       .order('updated_at', { ascending: false })
       .range(fromConv, fromConv + 999)
@@ -267,7 +267,7 @@ export async function fetchUnifiedOsmoContacts(orgId: string) {
   // Process leads first
   leads.forEach(l => {
     const p = (l.phone_number || '').replace(/\D/g, '').slice(-10)
-    if (!p) return
+    if (!p || p.length < 10) return
     const matchedConv = (l.conversation_id ? convsById.get(l.conversation_id) : null) || convsByPhone.get(p) || null
     
     let leadMeta: any = {}
@@ -302,7 +302,7 @@ export async function fetchUnifiedOsmoContacts(orgId: string) {
   // Process conversations that might not have a lead yet
   conversations.forEach(c => {
     const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-    if (!p) return
+    if (!p || p.length < 10) return
     if (unifiedMap.has(p)) return // already processed
 
     let convMeta: any = {}
