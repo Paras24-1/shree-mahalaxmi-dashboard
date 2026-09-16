@@ -114,6 +114,8 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
       } else {
         conversation.metadata = { lead_type: newCategory, category: newCategory }
       }
+      conversation.updated_at = new Date().toISOString()
+      window.dispatchEvent(new CustomEvent('update-conversation', { detail: conversation }))
     }
 
     if (lead) {

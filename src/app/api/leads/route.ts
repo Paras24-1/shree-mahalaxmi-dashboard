@@ -242,12 +242,23 @@ export async function PATCH(req: NextRequest) {
     // Sync conversations table if name, stage, or lead_type was updated
     const targetConvId = conversation_id || data?.conversation_id
     if (targetConvId) {
-      if (updates.name || updates.stage) {
+      if (updates.name || updates.stage || updates.lead_type) {
+        let convMetaUpdate = undefined
+
+        if (updates.lead_type) {
+          const { data: cData } = await supabaseAdmin.from('conversations').select('metadata').eq('id', targetConvId).maybeSingle()
+          let cMeta = cData?.metadata || {}
+          if (typeof cMeta === 'string') try { cMeta = JSON.parse(cMeta) } catch {}
+          cMeta = { ...cMeta, lead_type: updates.lead_type, category: updates.lead_type, user_type: updates.lead_type, Lead_Type: updates.lead_type }
+          convMetaUpdate = cMeta
+        }
+
         await supabaseAdmin
           .from('conversations')
           .update({
             ...(updates.name  ? { name: updates.name }   : {}),
             ...(updates.stage ? { stage: updates.stage } : {}),
+            ...(convMetaUpdate ? { metadata: convMetaUpdate } : {})
           })
           .eq('id', targetConvId)
           .eq('org_id', orgId)

@@ -58,6 +58,19 @@ export function useConversations(filters: {
     fetchConversations()
   }, [fetchConversations])
 
+  useEffect(() => {
+    const handleLocalUpdate = (e: any) => {
+      const updatedConv = e.detail
+      if (!updatedConv || !updatedConv.id) return
+      setConversations(prev => {
+        const list = prev.map(c => c.id === updatedConv.id ? { ...c, ...updatedConv } : c)
+        return [...list].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      })
+    }
+    window.addEventListener('update-conversation', handleLocalUpdate)
+    return () => window.removeEventListener('update-conversation', handleLocalUpdate)
+  }, [])
+
   // Realtime subscription filtered to this org only
   useEffect(() => {
     if (!orgId) return

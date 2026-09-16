@@ -84,7 +84,7 @@ export async function PATCH(
 
     const { data: conv } = await supabaseAdmin
       .from('conversations')
-      .select('id, assigned_to, phone_number, name')
+      .select('id, assigned_to, phone_number, name, metadata')
       .eq('id', id)
       .eq('org_id', profile.orgId)
       .maybeSingle()
@@ -178,6 +178,20 @@ export async function PATCH(
             metadata: leadMeta
           })
       }
+
+      // Prepare conversation metadata update so fetchUnifiedOsmoContacts sees it instantly
+      let convMeta = conv.metadata || {}
+      if (typeof convMeta === 'string') {
+        try { convMeta = JSON.parse(convMeta) } catch {}
+      }
+      convMeta = {
+        ...convMeta,
+        lead_type: targetLeadType,
+        category: targetLeadType,
+        user_type: targetLeadType,
+        Lead_Type: targetLeadType
+      }
+      filteredBody.metadata = convMeta
     }
 
     const { error } = await supabaseAdmin

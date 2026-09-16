@@ -240,6 +240,18 @@ function LeadsContent() {
       return l
     }))
 
+    const oldCat = typeof lead.metadata === 'string' 
+      ? JSON.parse(lead.metadata || '{}').category || lead.lead_type || 'unfiltered' 
+      : (lead.metadata as any)?.category || lead.lead_type || 'unfiltered'
+    
+    if (oldCat !== newCategory) {
+      setStats(prev => ({
+        ...prev,
+        [oldCat]: Math.max(0, (prev[oldCat as keyof typeof prev] as number) - 1),
+        [newCategory]: (prev[newCategory as keyof typeof prev] as number) + 1
+      }))
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token || ''
@@ -296,6 +308,15 @@ function LeadsContent() {
       const currentMeta = typeof activeLead.metadata === 'string' ? JSON.parse(activeLead.metadata || '{}') : (activeLead.metadata || {})
       const mergedMeta = { ...currentMeta, lead_type: editCategory, category: editCategory, state: editState }
       
+      const oldCat = currentMeta.category || activeLead.lead_type || 'unfiltered'
+      if (oldCat !== editCategory) {
+        setStats(prev => ({
+          ...prev,
+          [oldCat]: Math.max(0, (prev[oldCat as keyof typeof prev] as number) - 1),
+          [editCategory]: (prev[editCategory as keyof typeof prev] as number) + 1
+        }))
+      }
+
       // Update local state list
       setLeads(prev => prev.map(l => (l.id === activeLead.id || (l.phone_number && activeLead.phone_number && l.phone_number === activeLead.phone_number)) ? { ...l, ...updates, metadata: mergedMeta } : l))
       setActiveLead(prev => prev ? { ...prev, ...updates, metadata: mergedMeta } : null)
