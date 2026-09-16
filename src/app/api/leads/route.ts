@@ -85,35 +85,8 @@ export async function PATCH(req: NextRequest) {
 
     let mergedMeta = { ...(parsedMeta || {}) };
 
-    // Fetch existing lead to protect high-value lead_types from being downgraded to 'unfiltered'
-    let existingLead: any = null
-    if (leadId) {
-      const res = await supabaseAdmin.from('leads').select('metadata').eq('id', leadId).eq('org_id', orgId).maybeSingle()
-      existingLead = res.data
-    }
-    if (!existingLead && conversation_id) {
-      const res = await supabaseAdmin.from('leads').select('metadata').eq('conversation_id', conversation_id).eq('org_id', orgId).maybeSingle()
-      existingLead = res.data
-    }
-    if (!existingLead && phone_number) {
-      const phone = String(phone_number).replace(/\D/g, '').slice(-10)
-      const res = await supabaseAdmin.from('leads').select('metadata').ilike('phone_number', `%${phone}`).eq('org_id', orgId).maybeSingle()
-      existingLead = res.data
-    }
-
-    const currentLeadType = (existingLead?.metadata?.lead_type || existingLead?.metadata?.category || '').toLowerCase()
+    // Only apply lead_type to metadata — no downgrade protection so manual assignment always wins
     let targetLeadType = updates.lead_type || body.lead_type
-    
-    // Protect from downgrading
-    const targetLower = targetLeadType?.toString().toLowerCase().trim() || ''
-    const isDowngrade = ['unfiltered', 'unknown', 'none', 'null', 'na', 'n/a', ''].includes(targetLower)
-    const isCurrentlyValid = currentLeadType && !['unfiltered', 'unknown', 'none', 'null', 'na', 'n/a', ''].includes(currentLeadType)
-
-    if (isDowngrade && isCurrentlyValid) {
-      targetLeadType = currentLeadType
-      delete updates.lead_type
-      delete body.lead_type
-    }
 
     if (targetLeadType) {
       mergedMeta.lead_type = targetLeadType

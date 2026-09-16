@@ -33,6 +33,14 @@ const STAGE_COLORS: Record<Stage, string> = {
 import { classifyOsmoContact, OsmoCategoryKey as OsmoLeadCategory } from '@/lib/osmoPhonebooks'
 
 function classifyLeadType(conv: Conversation): OsmoLeadCategory {
+  // If the conversation already has an explicitly-stored lead_type from the DB/leads table,
+  // use it directly without running keyword classification (which would override manual assignments)
+  const explicit = (conv.lead_type || (conv as any).category || '').trim().toLowerCase()
+  if (explicit === 'osmo_dealer' || explicit === 'osmo dealer') return 'osmo_dealer'
+  if (explicit === 'dealer') return 'dealer'
+  if (explicit === 'customer') return 'customer'
+  if (explicit === 'unfiltered') return 'unfiltered'
+  // Fall back to full keyword-based classification only if no explicit value stored
   return classifyOsmoContact(conv)
 }
 

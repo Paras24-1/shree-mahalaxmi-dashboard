@@ -137,18 +137,8 @@ export async function PATCH(
         try { leadMeta = JSON.parse(leadMeta) } catch {}
       }
 
-      const currentLeadType = (leadMeta.lead_type || leadMeta.category || '').toLowerCase()
-      let targetLeadType = body.lead_type
-
-      // Protect from downgrading
-      const targetLower = targetLeadType?.toString().toLowerCase().trim() || ''
-      const isDowngrade = ['unfiltered', 'unknown', 'none', 'null', 'na', 'n/a', ''].includes(targetLower)
-      const isCurrentlyValid = currentLeadType && !['unfiltered', 'unknown', 'none', 'null', 'na', 'n/a', ''].includes(currentLeadType)
-
-      if (isDowngrade && isCurrentlyValid) {
-        targetLeadType = currentLeadType
-        body.lead_type = currentLeadType // update body so any background sync gets the preserved type
-      }
+      // User manually set the category — respect it always, no downgrade protection
+      const targetLeadType = body.lead_type
 
       leadMeta = { 
         ...leadMeta, 

@@ -104,7 +104,15 @@ export function useConversations(filters: {
             setConversations(prev => {
               const list = prev.map(c => {
                 if (c.id === updatedConv.id) {
-                  return { ...c, ...updatedConv }
+                  // Preserve lead_type/category from local state — the DB conversations table
+                  // does NOT have these columns, so the realtime event would wipe them.
+                  // They are computed from the leads table and must not be overwritten.
+                  return { 
+                    ...c, 
+                    ...updatedConv,
+                    lead_type: c.lead_type ?? updatedConv.lead_type,
+                    category: (c as any).category ?? (updatedConv as any).category
+                  }
                 }
                 return c
               })
