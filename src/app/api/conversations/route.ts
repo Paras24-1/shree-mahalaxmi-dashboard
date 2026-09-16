@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, getUserProfile } from '@/lib/supabase'
+import { classifyOsmoContact } from '@/lib/osmoPhonebooks'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
@@ -101,34 +104,23 @@ export async function GET(req: NextRequest) {
         try { leadMeta = JSON.parse(leadMeta) } catch {}
       }
 
-      const leadType =
-        conv.lead_type ||
-        parsedMeta.lead_type ||
-        parsedMeta.Lead_Type ||
-        parsedMeta.category ||
-        parsedMeta.user_type ||
-        matchedLead?.lead_type ||
-        matchedLead?.Lead_Type ||
-        leadMeta.lead_type ||
-        leadMeta.Lead_Type ||
-        leadMeta.category ||
-        leadMeta.type ||
-        leadMeta.user_type ||
-        leadMeta.customer_type ||
-        ''
+      // Compute unified derived category using classifyOsmoContact
+      const derivedType = classifyOsmoContact({
+        ...conv,
+        lead: matchedLead
+      })
 
-      if (leadType) {
-        parsedMeta.lead_type = leadType
-        parsedMeta.category = leadType
-        leadMeta.lead_type = leadType
-        leadMeta.category = leadType
-      }
+      parsedMeta.lead_type = derivedType
+      parsedMeta.category = derivedType
+      leadMeta.lead_type = derivedType
+      leadMeta.category = derivedType
 
       return {
         ...conv,
         metadata: parsedMeta,
-        lead: matchedLead ? { ...matchedLead, metadata: leadMeta, lead_type: leadType } : (conv.lead ? { ...(Array.isArray(conv.lead) ? conv.lead[0] : conv.lead), metadata: leadMeta, lead_type: leadType } : null),
-        lead_type: leadType,
+        lead: matchedLead ? { ...matchedLead, metadata: leadMeta, lead_type: derivedType, category: derivedType } : null,
+        lead_type: derivedType,
+        category: derivedType
       }
     })
 
