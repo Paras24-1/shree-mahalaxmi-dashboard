@@ -284,7 +284,7 @@ function AnalyticsContent() {
           <StatCard 
             icon={<Clock className="w-5 h-5 text-amber-500" />} 
             label="Unassigned Queue" 
-            value={stats.total_unassigned} 
+            value={stats.total_unassigned ?? Math.max(0, (stats.total_conversations || 0) - (stats.total_assigned || 0))} 
             description="Awaiting assignment response"
             color="amber" 
           />

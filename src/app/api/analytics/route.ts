@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, getOrgId } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,7 +43,7 @@ export async function GET(req: NextRequest) {
     const [
       { count: totalConversations },
       { count: totalAssigned },
-      { count: totalUnassigned }
+      { count: totalUnassignedRaw }
     ] = await Promise.all([
       supabaseAdmin
         .from('conversations')
@@ -58,6 +60,10 @@ export async function GET(req: NextRequest) {
         .eq('org_id', orgId)
         .is('assigned_to', null)
     ])
+
+    const totalConvCount = totalConversations || 0
+    const totalAssignedCount = totalAssigned || 0
+    const totalUnassigned = Math.max(0, totalConvCount - totalAssignedCount)
 
     // 4. Fetch stage counts (including handling null as 'new')
     const stages = ['interested', 'booking', 'confirmed', 'completed', 'cancelled', 'followup', 'not_interested', 'call_done', 'low_budget', 'hot_customer', 'not_connected', 'joined', 'not_joined', 'unknown']
@@ -159,13 +165,19 @@ export async function GET(req: NextRequest) {
     // Return the unified aggregates
     return NextResponse.json({
       stage_counts: stageCounts,
-      total_conversations: totalConversations || 0,
-      total_assigned: totalAssigned || 0,
-      total_unassigned: totalUnassigned || 0,
+      total_conversations: totalConvCount,
+      total_assigned: totalAssignedCount,
+      total_unassigned: totalUnassigned,
       total_active: totalActive || 0,
       total_completed: totalCompleted || 0,
       employees: employeeStats,
       timeline
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 })
