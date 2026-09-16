@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, getUserProfile } from '@/lib/supabase'
-import { classifyOsmoContact, isOsmoOrg } from '@/lib/osmoPhonebooks'
+import { fetchUnifiedOsmoContacts } from '@/lib/osmoPhonebooks'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,67 +19,9 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('start_date') || ''
     const endDate = searchParams.get('end_date') || ''
 
-    // 1. Fetch conversations for org to get assigned_to, stage, notes, and last_message
-    let allConvs: any[] = []
-    let fromConv = 0
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from('conversations')
-        .select('id, phone_number, name, stage, last_message, notes, assigned_to')
-        .eq('org_id', orgId)
-        .range(fromConv, fromConv + 999)
-      if (error) break
-      if (!data || data.length === 0) break
-      allConvs.push(...data)
-      if (data.length < 1000) break
-      fromConv += 1000
-    }
+    const unifiedContacts = await fetchUnifiedOsmoContacts(orgId)
 
-    const assignedConvIds = new Set<string>()
-    const assignedPhones = new Set<string>()
-    if (isStaffEmployee) {
-      allConvs.forEach(c => {
-        if (c.assigned_to === userId) {
-          if (c.id) assignedConvIds.add(c.id)
-          const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-          if (p) assignedPhones.add(p)
-        }
-      })
-    }
-
-    // 2. Fetch all leads for org with pagination
-    let allLeads: any[] = []
-    let fromLead = 0
-    while (true) {
-      let q = supabaseAdmin
-        .from('leads')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false })
-
-      if (startDate) q = q.gte('created_at', startDate)
-      if (endDate) q = q.lte('created_at', `${endDate}T23:59:59.999Z`)
-      if (search) q = q.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%,customer_name.ilike.%${search}%`)
-
-      const { data, error } = await q.range(fromLead, fromLead + 999)
-      if (error) throw error
-      if (!data || data.length === 0) break
-      allLeads.push(...data)
-      if (data.length < 1000) break
-      fromLead += 1000
-    }
-
-    const convsByPhone = new Map<string, any>()
-    const convsById = new Map<string, any>()
-    allConvs.forEach(c => {
-      if (c.id) convsById.set(c.id, c)
-      if (c.phone_number) {
-        const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-        if (p) convsByPhone.set(p, c)
-      }
-    })
-
-    const stats = {
+    const stats: Record<string, number> = {
       total: 0,
       osmo_dealer: 0,
       dealer: 0,
@@ -90,25 +32,17 @@ export async function GET(req: NextRequest) {
       followups: 0
     }
 
-    allLeads.forEach(l => {
-      const p = (l.phone_number || '').replace(/\D/g, '').slice(-10)
-      if (isStaffEmployee) {
-        const isAssigned = (l.conversation_id && assignedConvIds.has(l.conversation_id)) || (p && assignedPhones.has(p))
-        if (!isAssigned) return
+    unifiedContacts.forEach(uc => {
+      if (isStaffEmployee && uc.conversation?.assigned_to !== userId) {
+        return
       }
 
-      const matchedConv = (l.conversation_id ? convsById.get(l.conversation_id) : null) || (p ? convsByPhone.get(p) : null)
+      const l = uc.lead || {}
+      const c = uc.conversation || {}
       
-      let parsedMeta: Record<string, any> = {}
-      if (l.metadata) {
-        if (typeof l.metadata === 'string') {
-          try { parsedMeta = JSON.parse(l.metadata) } catch {}
-        } else if (typeof l.metadata === 'object') {
-          parsedMeta = l.metadata
-        }
-      }
+      let parsedMeta: Record<string, any> = l.metadata || {}
 
-      const leadStage = matchedConv?.stage || parsedMeta.state || parsedMeta.stage || 'new'
+      const leadStage = c.stage || l.stage || parsedMeta.state || parsedMeta.stage || 'new'
       if (leadStage === 'followup' || !!l.followup_date) stats.followups++
       if (stage && leadStage !== stage) return
 
@@ -122,14 +56,23 @@ export async function GET(req: NextRequest) {
       if (q === 'warm') stats.warm++
       if (quality && q !== quality.toLowerCase()) return
 
-      const combined = {
-        ...l,
-        lead: l,
-        notes: matchedConv?.notes || l.notes || l.followup_notes,
-        last_message: matchedConv?.last_message
+      if (startDate || endDate) {
+        const createdAt = l.created_at || c.created_at
+        if (!createdAt) return
+        const dt = new Date(createdAt).getTime()
+        if (startDate && dt < new Date(startDate).getTime()) return
+        if (endDate && dt > new Date(`${endDate}T23:59:59.999Z`).getTime()) return
       }
 
-      const category = classifyOsmoContact(combined)
+      if (search) {
+        const srch = search.toLowerCase()
+        const n = (l.name || c.name || '').toLowerCase()
+        const p = (uc.phone || '').toLowerCase()
+        const cst = (l.customer_name || '').toLowerCase()
+        if (!n.includes(srch) && !p.includes(srch) && !cst.includes(srch)) return
+      }
+
+      const category = uc.category
       stats.total++
       if (category in stats) {
         stats[category]++

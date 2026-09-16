@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, getUserProfile } from '@/lib/supabase'
-import { classifyOsmoContact, isOsmoOrg } from '@/lib/osmoPhonebooks'
+import { classifyOsmoContact, fetchUnifiedOsmoContacts } from '@/lib/osmoPhonebooks'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,124 +26,80 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50', 10)
     const from = (page - 1) * limit
 
-    // 1. Fetch conversations for org
-    let allConvs: any[] = []
-    let fromConv = 0
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from('conversations')
-        .select('id, phone_number, name, stage, last_message, notes, assigned_to')
-        .eq('org_id', orgId)
-        .range(fromConv, fromConv + 999)
-      if (error) break
-      if (!data || data.length === 0) break
-      allConvs.push(...data)
-      if (data.length < 1000) break
-      fromConv += 1000
-    }
+    const unifiedContacts = await fetchUnifiedOsmoContacts(orgId)
 
-    const assignedConvIds = new Set<string>()
-    const assignedPhones = new Set<string>()
+    // Apply staff restriction first
+    let allowedContacts = unifiedContacts
     if (isStaffEmployee) {
-      allConvs.forEach(c => {
-        if (c.assigned_to === userId) {
-          if (c.id) assignedConvIds.add(c.id)
-          const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-          if (p) assignedPhones.add(p)
-        }
+      allowedContacts = unifiedContacts.filter(uc => {
+        return uc.conversation?.assigned_to === userId
       })
     }
 
-    // 2. Fetch all leads for org with pagination
-    let allLeads: any[] = []
-    let fromLead = 0
-    while (true) {
-      let q = supabaseAdmin
-        .from('leads')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false })
-
-      if (startDate) q = q.gte('created_at', startDate)
-      if (endDate) q = q.lte('created_at', `${endDate}T23:59:59.999Z`)
-      if (search) q = q.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%,customer_name.ilike.%${search}%`)
-
-      const { data, error } = await q.range(fromLead, fromLead + 999)
-      if (error) throw error
-      if (!data || data.length === 0) break
-      allLeads.push(...data)
-      if (data.length < 1000) break
-      fromLead += 1000
-    }
-
-    const convsByPhone = new Map<string, any>()
-    const convsById = new Map<string, any>()
-    allConvs.forEach(c => {
-      if (c.id) convsById.set(c.id, c)
-      if (c.phone_number) {
-        const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-        if (p) convsByPhone.set(p, c)
-      }
-    })
-
     // 3. Process each lead, derive classification, and parse metadata
-    const enrichedLeads = allLeads.map((lead) => {
-      let parsedMetadata: Record<string, any> = {}
-      if (lead.metadata) {
-        if (typeof lead.metadata === 'string') {
-          try {
-            parsedMetadata = JSON.parse(lead.metadata)
-          } catch {}
-        } else if (typeof lead.metadata === 'object') {
-          parsedMetadata = lead.metadata
-        }
-      }
+    const enrichedLeads = allowedContacts.map((uc) => {
+      const l = uc.lead || {}
+      const c = uc.conversation || {}
+      const p = uc.phone
 
-      const p = (lead.phone_number || '').replace(/\D/g, '').slice(-10)
-      const matchedConv = (lead.conversation_id ? convsById.get(lead.conversation_id) : null) || (p ? convsByPhone.get(p) : null)
-      const combined = {
-        ...lead,
-        lead: lead,
-        notes: matchedConv?.notes || lead.notes || lead.followup_notes,
-        last_message: matchedConv?.last_message
-      }
-
-      const derivedType = classifyOsmoContact(combined)
-
+      let parsedMetadata: Record<string, any> = l.metadata || {}
+      
       const score = Number(parsedMetadata.lead_score ?? 0)
-      let q = (parsedMetadata.lead_quality || parsedMetadata.lead_temperature || lead.lead_temperature || 'cold').toLowerCase()
+      let q = (parsedMetadata.lead_quality || parsedMetadata.lead_temperature || l.lead_temperature || 'cold').toLowerCase()
       if (score >= 70) q = 'hot'
       else if (score >= 40) q = 'warm'
       else if (score > 0) q = 'cold'
 
-      const stg = matchedConv?.stage || parsedMetadata.state || parsedMetadata.stage || 'new'
-      const displayName = lead.name || lead.customer_name || parsedMetadata.Name || parsedMetadata.name || parsedMetadata.contact_person || parsedMetadata.customer_name || 'Unknown'
+      const stg = c.stage || l.stage || parsedMetadata.state || parsedMetadata.stage || 'new'
+      const displayName = c.name || l.name || l.customer_name || parsedMetadata.Name || parsedMetadata.name || parsedMetadata.contact_person || parsedMetadata.customer_name || 'Unknown'
 
+      // Keep original created_at if it's from lead, else conversation
+      const createdAt = l.created_at || c.created_at
+      
       return {
-        ...lead,
+        ...l,
         ...parsedMetadata,
-        lead_type: derivedType,
+        id: l.id || c.id || p,
+        phone_number: p,
+        created_at: createdAt,
+        lead_type: uc.category,
         name: displayName,
         stage: stg,
         lead_quality: q,
         lead_temperature: q.toUpperCase(),
         lead_score: score,
-        metadata: { ...parsedMetadata, lead_type: derivedType, category: derivedType },
-        _isAssignedToStaff: !isStaffEmployee || (lead.conversation_id && assignedConvIds.has(lead.conversation_id)) || (p && assignedPhones.has(p))
+        metadata: { ...parsedMetadata, lead_type: uc.category, category: uc.category }
       }
     })
 
-    // 4. Apply filters (staff assignment, stage, quality, leadType)
+    // 4. Apply filters (stage, quality, leadType, state, date, search)
     const filteredLeads = enrichedLeads.filter(l => {
-      if (isStaffEmployee && !l._isAssignedToStaff) return false
       if (stage && l.stage !== stage) return false
       if (quality && l.lead_quality !== quality.toLowerCase()) return false
       if (leadType && leadType !== 'all') {
         if (l.lead_type !== leadType) return false
       }
       if (geographicState && l.state !== geographicState) return false
+      
+      if (startDate || endDate) {
+        if (!l.created_at) return false
+        const dt = new Date(l.created_at).getTime()
+        if (startDate && dt < new Date(startDate).getTime()) return false
+        if (endDate && dt > new Date(`${endDate}T23:59:59.999Z`).getTime()) return false
+      }
+      
+      if (search) {
+        const srch = search.toLowerCase()
+        const n = (l.name || '').toLowerCase()
+        const p = (l.phone_number || '').toLowerCase()
+        const cst = (l.customer_name || '').toLowerCase()
+        if (!n.includes(srch) && !p.includes(srch) && !cst.includes(srch)) return false
+      }
+      
       return true
     })
+
+
 
     const slicedLeads = filteredLeads.slice(from, from + limit)
     const hasMore = (from + limit) < filteredLeads.length

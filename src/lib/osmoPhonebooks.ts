@@ -218,6 +218,117 @@ export async function isOsmoOrg(orgId: string): Promise<boolean> {
   }
 }
 
+export async function fetchUnifiedOsmoContacts(orgId: string) {
+  // 1. Fetch all conversations and leads for this org
+  let conversations: any[] = []
+  let fromConv = 0
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from('conversations')
+      .select('id, phone_number, name, stage, last_message, notes, assigned_to, unread_count, updated_at, created_at, metadata')
+      .eq('org_id', orgId)
+      .order('updated_at', { ascending: false })
+      .range(fromConv, fromConv + 999)
+    if (error) break
+    if (!data || data.length === 0) break
+    conversations.push(...data)
+    if (data.length < 1000) break
+    fromConv += 1000
+  }
+
+  let leads: any[] = []
+  let fromLead = 0
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from('leads')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .range(fromLead, fromLead + 999)
+    if (error) break
+    if (!data || data.length === 0) break
+    leads.push(...data)
+    if (data.length < 1000) break
+    fromLead += 1000
+  }
+
+  // 2. Map them
+  const convsById = new Map<string, any>()
+  const convsByPhone = new Map<string, any>()
+  conversations.forEach(c => {
+    if (c.id) convsById.set(c.id, c)
+    const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
+    if (p) convsByPhone.set(p, c)
+  })
+
+  // 3. Merge into unified map
+  const unifiedMap = new Map<string, any>()
+
+  // Process leads first
+  leads.forEach(l => {
+    const p = (l.phone_number || '').replace(/\D/g, '').slice(-10)
+    if (!p) return
+    const matchedConv = (l.conversation_id ? convsById.get(l.conversation_id) : null) || convsByPhone.get(p) || null
+    
+    let leadMeta: any = {}
+    if (typeof l.metadata === 'string') { try { leadMeta = JSON.parse(l.metadata) } catch {} } 
+    else if (l.metadata) leadMeta = l.metadata
+
+    let convMeta: any = {}
+    if (matchedConv?.metadata) {
+      if (typeof matchedConv.metadata === 'string') { try { convMeta = JSON.parse(matchedConv.metadata) } catch {} } 
+      else convMeta = matchedConv.metadata
+    }
+
+    const combinedForClassification = {
+      ...l,
+      lead: { ...l, metadata: leadMeta },
+      metadata: convMeta,
+      notes: matchedConv?.notes || l.notes || l.followup_notes,
+      last_message: matchedConv?.last_message
+    }
+    
+    const category = classifyOsmoContact(combinedForClassification)
+    
+    unifiedMap.set(p, {
+      phone: p,
+      lead: { ...l, metadata: leadMeta, lead_type: category, category },
+      conversation: matchedConv ? { ...matchedConv, metadata: convMeta } : null,
+      category,
+      lead_type: category
+    })
+  })
+
+  // Process conversations that might not have a lead yet
+  conversations.forEach(c => {
+    const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
+    if (!p) return
+    if (unifiedMap.has(p)) return // already processed
+
+    let convMeta: any = {}
+    if (typeof c.metadata === 'string') { try { convMeta = JSON.parse(c.metadata) } catch {} } 
+    else if (c.metadata) convMeta = c.metadata
+
+    const combinedForClassification = {
+      ...c,
+      lead: null,
+      metadata: convMeta
+    }
+    
+    const category = classifyOsmoContact(combinedForClassification)
+    
+    unifiedMap.set(p, {
+      phone: p,
+      lead: null,
+      conversation: { ...c, metadata: convMeta },
+      category,
+      lead_type: category
+    })
+  })
+
+  return Array.from(unifiedMap.values())
+}
+
 /**
  * Ensures the 3 auto-segregated phonebooks exist for Osmo RO,
  * synchronizes all current conversations & CRM leads into their respective phonebooks,
@@ -267,47 +378,8 @@ export async function syncOsmoPhonebooks(orgId: string) {
       pbMap[key] = found
     }
 
-    // 2. Fetch all conversations and leads for this org with pagination
-    let conversations: any[] = []
-    let fromConv = 0
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from('conversations')
-        .select('id, phone_number, name, stage, last_message, notes')
-        .eq('org_id', orgId)
-        .range(fromConv, fromConv + 999)
-      if (error) break
-      if (!data || data.length === 0) break
-      conversations.push(...data)
-      if (data.length < 1000) break
-      fromConv += 1000
-    }
+    const unifiedContacts = await fetchUnifiedOsmoContacts(orgId)
 
-    let leads: any[] = []
-    let fromLead = 0
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from('leads')
-        .select('*')
-        .eq('org_id', orgId)
-        .range(fromLead, fromLead + 999)
-      if (error) break
-      if (!data || data.length === 0) break
-      leads.push(...data)
-      if (data.length < 1000) break
-      fromLead += 1000
-    }
-
-    // Map leads by conversation id and phone
-    const leadsByConvId = new Map<string, any>()
-    const leadsByPhone = new Map<string, any>()
-    leads.forEach(l => {
-      if (l.conversation_id) leadsByConvId.set(l.conversation_id, l)
-      const p = (l.phone_number || '').replace(/\D/g, '').slice(-10)
-      if (p) leadsByPhone.set(p, l)
-    })
-
-    // Group contacts by category
     const categorizedContacts: Record<OsmoCategoryKey, Map<string, any>> = {
       osmo_dealer: new Map(),
       dealer: new Map(),
@@ -315,24 +387,24 @@ export async function syncOsmoPhonebooks(orgId: string) {
       unfiltered: new Map()
     };
 
-    // Process conversations
-    (conversations || []).forEach((c: any) => {
-      const p = cleanPhone(c.phone_number)
+    unifiedContacts.forEach((uc) => {
+      const p = cleanPhone(uc.phone)
       if (p.length < 10) return
 
-      const rawPhone = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-      const leadObj = (c.id ? leadsByConvId.get(c.id) : null) || (rawPhone ? leadsByPhone.get(rawPhone) : null)
-      const category = classifyOsmoContact({ ...c, lead: leadObj })
-      const meta = typeof c.metadata === 'string' ? (() => { try { return JSON.parse(c.metadata) } catch { return {} } })() : (c.metadata || {})
-      const leadMeta = typeof leadObj?.metadata === 'string' ? (() => { try { return JSON.parse(leadObj.metadata) } catch { return {} } })() : (leadObj?.metadata || {})
+      const category = uc.category as OsmoCategoryKey
+      const l = uc.lead
+      const c = uc.conversation
+      
+      const leadMeta = l?.metadata || {}
+      const convMeta = c?.metadata || {}
 
-      const name = c.name || leadObj?.name || leadObj?.customer_name || meta.name || leadMeta.name || leadMeta.contact_person || `Contact ${p.slice(-4)}`
-      const stage = c.stage || leadObj?.stage || 'new'
-      const quality = leadObj?.lead_quality || leadObj?.lead_temperature || meta.lead_quality || 'cold'
-      const score = leadObj?.lead_score || meta.lead_score || 0
-      const city = leadMeta.city || meta.city || ''
-      const machineInterest = leadMeta.machine_interest || meta.machine_interest || ''
-      const has_been_bulk_messaged = leadMeta.has_been_bulk_messaged || meta.has_been_bulk_messaged || false;
+      const name = c?.name || l?.name || l?.customer_name || convMeta.name || leadMeta.name || leadMeta.contact_person || `Contact ${p.slice(-4)}`
+      const stage = c?.stage || l?.stage || 'new'
+      const quality = l?.lead_quality || l?.lead_temperature || leadMeta.lead_quality || 'cold'
+      const score = l?.lead_score || leadMeta.lead_score || 0
+      const city = leadMeta.city || convMeta.city || ''
+      const machineInterest = leadMeta.machine_interest || convMeta.machine_interest || ''
+      const has_been_bulk_messaged = leadMeta.has_been_bulk_messaged || convMeta.has_been_bulk_messaged || false;
 
       categorizedContacts[category].set(p, {
         phone: p,
@@ -349,41 +421,6 @@ export async function syncOsmoPhonebooks(orgId: string) {
           has_been_bulk_messaged: String(has_been_bulk_messaged)
         }
       })
-    });
-
-    // Process leads (in case any lead exists without a conversation record)
-    (leads || []).forEach((l: any) => {
-      const p = cleanPhone(l.phone_number)
-      if (p.length < 10) return
-
-      // If already added via conversations, preserve existing or merge
-      const category = classifyOsmoContact(l)
-      if (!categorizedContacts[category].has(p)) {
-        const meta = typeof l.metadata === 'string' ? (() => { try { return JSON.parse(l.metadata) } catch { return {} } })() : (l.metadata || {})
-        const name = l.name || (l as any).customer_name || meta.name || meta.contact_person || `Lead ${p.slice(-4)}`
-        const stage = l.stage || 'new'
-        const quality = l.lead_quality || l.lead_temperature || meta.lead_quality || 'cold'
-        const score = l.lead_score || meta.lead_score || 0
-        const city = meta.city || ''
-        const machineInterest = meta.machine_interest || ''
-        const has_been_bulk_messaged = meta.has_been_bulk_messaged || false;
-
-        categorizedContacts[category].set(p, {
-          phone: p,
-          name,
-          variables: {
-            name,
-            phone: p,
-            category: OSMO_PHONEBOOK_DEFINITIONS[category].label,
-            stage,
-            quality: String(quality).toUpperCase(),
-            score: String(score),
-            city,
-            machine_interest: machineInterest,
-            has_been_bulk_messaged: String(has_been_bulk_messaged)
-          }
-        })
-      }
     })
 
     // 3. Upsert contacts for each of the 3 phonebooks
