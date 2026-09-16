@@ -166,7 +166,7 @@ function AnalyticsContent() {
       const token = session?.access_token || ''
       const headers = { 'Authorization': `Bearer ${token}` }
 
-      const res = await fetch('/api/analytics', { headers })
+      const res = await fetch('/api/analytics', { headers, cache: 'no-store' })
       if (!res.ok) throw new Error('Failed to fetch analytics')
       const data = await res.json()
       setStats(data)
