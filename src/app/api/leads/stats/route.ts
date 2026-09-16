@@ -19,129 +19,124 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('start_date') || ''
     const endDate = searchParams.get('end_date') || ''
 
-    const isOsmo = await isOsmoOrg(orgId)
-
-    if (isOsmo) {
-      // 1. Fetch all leads for org with pagination
-      let allLeads: any[] = []
-      let fromLead = 0
-      while (true) {
-        let q = supabaseAdmin
-          .from('leads')
-          .select('id, conversation_id, phone_number, name, customer_name, stage, lead_quality, lead_temperature, metadata, assigned_to, created_at')
-          .eq('org_id', orgId)
-          .order('created_at', { ascending: false })
-
-        if (isStaffEmployee) q = q.eq('assigned_to', userId)
-        if (stage) q = q.eq('stage', stage)
-        if (quality) q = q.eq('lead_quality', quality)
-        if (startDate) q = q.gte('created_at', startDate)
-        if (endDate) q = q.lte('created_at', `${endDate}T23:59:59.999Z`)
-        if (search) q = q.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%,customer_name.ilike.%${search}%`)
-
-        const { data, error } = await q.range(fromLead, fromLead + 999)
-        if (error) throw error
-        if (!data || data.length === 0) break
-        allLeads.push(...data)
-        if (data.length < 1000) break
-        fromLead += 1000
-      }
-
-      // 2. Fetch conversations to enrich notes and last_message
-      let allConvs: any[] = []
-      let fromConv = 0
-      while (true) {
-        const { data, error } = await supabaseAdmin
-          .from('conversations')
-          .select('id, phone_number, name, last_message, notes')
-          .eq('org_id', orgId)
-          .range(fromConv, fromConv + 999)
-        if (error) break
-        if (!data || data.length === 0) break
-        allConvs.push(...data)
-        if (data.length < 1000) break
-        fromConv += 1000
-      }
-
-      const convsByPhone = new Map<string, any>()
-      const convsById = new Map<string, any>()
-      allConvs.forEach(c => {
-        if (c.id) convsById.set(c.id, c)
-        if (c.phone_number) {
-          const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
-          if (p) convsByPhone.set(p, c)
-        }
-      })
-
-      const stats = {
-        total: allLeads.length,
-        osmo_dealer: 0,
-        dealer: 0,
-        customer: 0,
-        unfiltered: 0
-      }
-
-      allLeads.forEach(l => {
-        const p = (l.phone_number || '').replace(/\D/g, '').slice(-10)
-        const matchedConv = (l.conversation_id ? convsById.get(l.conversation_id) : null) || (p ? convsByPhone.get(p) : null)
-        const combined = {
-          ...l,
-          lead: l,
-          notes: matchedConv?.notes || l.notes || l.followup_notes,
-          last_message: matchedConv?.last_message
-        }
-        const category = classifyOsmoContact(combined)
-        if (category in stats) {
-          stats[category]++
-        } else {
-          stats.unfiltered++
-        }
-      })
-
-      return NextResponse.json(stats)
+    // 1. Fetch conversations for org to get assigned_to, stage, notes, and last_message
+    let allConvs: any[] = []
+    let fromConv = 0
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from('conversations')
+        .select('id, phone_number, name, stage, last_message, notes, assigned_to')
+        .eq('org_id', orgId)
+        .range(fromConv, fromConv + 999)
+      if (error) break
+      if (!data || data.length === 0) break
+      allConvs.push(...data)
+      if (data.length < 1000) break
+      fromConv += 1000
     }
 
-    // Default query for non-osmo orgs
-    const buildQuery = (leadType?: string) => {
-      let q = supabaseAdmin.from('leads').select('id', { count: 'exact', head: true }).eq('org_id', orgId)
-      
-      if (isStaffEmployee) q = q.eq('assigned_to', userId)
-      if (stage) q = q.eq('stage', stage)
-      if (quality) q = q.eq('lead_quality', quality)
+    const assignedConvIds = new Set<string>()
+    const assignedPhones = new Set<string>()
+    if (isStaffEmployee) {
+      allConvs.forEach(c => {
+        if (c.assigned_to === userId) {
+          if (c.id) assignedConvIds.add(c.id)
+          const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
+          if (p) assignedPhones.add(p)
+        }
+      })
+    }
+
+    // 2. Fetch all leads for org with pagination
+    let allLeads: any[] = []
+    let fromLead = 0
+    while (true) {
+      let q = supabaseAdmin
+        .from('leads')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+
       if (startDate) q = q.gte('created_at', startDate)
       if (endDate) q = q.lte('created_at', `${endDate}T23:59:59.999Z`)
       if (search) q = q.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%,customer_name.ilike.%${search}%`)
-      if (leadType) {
-        if (leadType === 'unfiltered') {
-           q = q.or('metadata->>lead_type.eq.unfiltered,metadata->>lead_type.is.null')
-        } else {
-           q = q.eq('metadata->>lead_type', leadType)
-        }
-      }
-      return q
+
+      const { data, error } = await q.range(fromLead, fromLead + 999)
+      if (error) throw error
+      if (!data || data.length === 0) break
+      allLeads.push(...data)
+      if (data.length < 1000) break
+      fromLead += 1000
     }
 
-    const [totalRes, osmoRes, dealerRes, customerRes, unfiltRes] = await Promise.all([
-      buildQuery(),
-      buildQuery('osmo_dealer'),
-      buildQuery('dealer'),
-      buildQuery('customer'),
-      buildQuery('unfiltered')
-    ])
-
-    if (totalRes.error) throw totalRes.error
-
-    return NextResponse.json({
-      total: totalRes.count || 0,
-      osmo_dealer: osmoRes.count || 0,
-      dealer: dealerRes.count || 0,
-      customer: customerRes.count || 0,
-      unfiltered: unfiltRes.count || 0
+    const convsByPhone = new Map<string, any>()
+    const convsById = new Map<string, any>()
+    allConvs.forEach(c => {
+      if (c.id) convsById.set(c.id, c)
+      if (c.phone_number) {
+        const p = (c.phone_number || '').replace(/\D/g, '').slice(-10)
+        if (p) convsByPhone.set(p, c)
+      }
     })
+
+    const stats = {
+      total: 0,
+      osmo_dealer: 0,
+      dealer: 0,
+      customer: 0,
+      unfiltered: 0
+    }
+
+    allLeads.forEach(l => {
+      const p = (l.phone_number || '').replace(/\D/g, '').slice(-10)
+      if (isStaffEmployee) {
+        const isAssigned = (l.conversation_id && assignedConvIds.has(l.conversation_id)) || (p && assignedPhones.has(p))
+        if (!isAssigned) return
+      }
+
+      const matchedConv = (l.conversation_id ? convsById.get(l.conversation_id) : null) || (p ? convsByPhone.get(p) : null)
+      
+      let parsedMeta: Record<string, any> = {}
+      if (l.metadata) {
+        if (typeof l.metadata === 'string') {
+          try { parsedMeta = JSON.parse(l.metadata) } catch {}
+        } else if (typeof l.metadata === 'object') {
+          parsedMeta = l.metadata
+        }
+      }
+
+      const leadStage = matchedConv?.stage || parsedMeta.state || parsedMeta.stage || 'new'
+      if (stage && leadStage !== stage) return
+
+      const score = Number(parsedMeta.lead_score ?? 0)
+      let q = (parsedMeta.lead_quality || parsedMeta.lead_temperature || l.lead_temperature || 'cold').toLowerCase()
+      if (score >= 70) q = 'hot'
+      else if (score >= 40) q = 'warm'
+      else if (score > 0) q = 'cold'
+      if (quality && q !== quality.toLowerCase()) return
+
+      const combined = {
+        ...l,
+        lead: l,
+        notes: matchedConv?.notes || l.notes || l.followup_notes,
+        last_message: matchedConv?.last_message
+      }
+
+      const category = classifyOsmoContact(combined)
+      stats.total++
+      if (category in stats) {
+        stats[category]++
+      } else {
+        stats.unfiltered++
+      }
+    })
+
+    return NextResponse.json(stats)
   } catch (err: unknown) {
     console.error('[leads-stats]', err)
     const error = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error }, { status: 500 })
   }
 }
+
 
