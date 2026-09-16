@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { Conversation, Lead, LeadActivity } from '@/types'
 import { supabase } from '@/lib/supabaseClient'
+
+import { INDIAN_STATES } from '@/lib/constants'
 import { RefreshCw, Phone, User, Target, MapPin, Wrench, Star, CheckCircle, MessageSquare, TrendingUp, StickyNote, Save, Calendar, Clock, Trash2, X, Plus, Check, Edit2, Ban } from 'lucide-react'
 
 const getLocalDateString = (d: Date) => {
@@ -712,16 +714,18 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
                     <span className="font-bold text-gray-500 dark:text-gray-400">Geographic State</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="e.g. Delhi"
+                    <select
                       value={leadState}
-                      onChange={(e) => setLeadState(e.target.value)}
-                      onBlur={() => handleStateSave(leadState)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleStateSave(leadState) }}
+                      onChange={(e) => {
+                        setLeadState(e.target.value)
+                        handleStateSave(e.target.value)
+                      }}
                       disabled={savingState}
                       className="w-28 text-[10px] uppercase font-bold tracking-wider px-2 py-1.5 rounded-lg border bg-gray-50 text-gray-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50 dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                    />
+                    >
+                      <option value="">SELECT</option>
+                      {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                     {savingState && <RefreshCw className="w-3 h-3 animate-spin text-emerald-500 shrink-0" />}
                   </div>
                 </div>

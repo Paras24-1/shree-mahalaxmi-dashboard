@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('start_date') || ''
     const endDate = searchParams.get('end_date') || ''
     const leadType = searchParams.get('lead_type') || ''
+    const geographicState = searchParams.get('state') || ''
     
     // Pagination (default to page 1, 50 items per page)
     const page = parseInt(searchParams.get('page') || '1', 10)
@@ -140,6 +141,7 @@ export async function GET(req: NextRequest) {
       if (leadType && leadType !== 'all') {
         if (l.lead_type !== leadType) return false
       }
+      if (geographicState && l.state !== geographicState) return false
       return true
     })
 

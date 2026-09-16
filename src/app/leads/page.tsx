@@ -18,7 +18,8 @@ import {
   Trash2,
   RefreshCw,
   AlertCircle,
-  ChevronDown
+  ChevronDown,
+  MapPin
 } from 'lucide-react'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
@@ -95,6 +96,7 @@ export default function LeadsPage() {
 }
 
 import { classifyOsmoContact } from '@/lib/osmoPhonebooks'
+import { INDIAN_STATES } from '@/lib/constants'
 
 function classifyLead(lead: Lead): 'osmo_dealer' | 'dealer' | 'customer' | 'unfiltered' {
   return classifyOsmoContact(lead)
@@ -123,6 +125,7 @@ function LeadsContent() {
   const [search, setSearch] = useState('')
   const [selectedStage, setSelectedStage] = useState('')
   const [selectedQuality, setSelectedQuality] = useState('')
+  const [selectedState, setSelectedState] = useState('')
   const [leadTypeFilter, setLeadTypeFilter] = useState<string>('unfiltered') // unfiltered, osmo_dealer, dealer, customer
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -175,6 +178,7 @@ function LeadsContent() {
       const statsParams = new URLSearchParams()
       if (selectedStage) statsParams.set('stage', selectedStage)
       if (selectedQuality) statsParams.set('quality', selectedQuality)
+      if (selectedState) statsParams.set('state', selectedState)
       if (search) statsParams.set('search', search)
       if (startDate) statsParams.set('start_date', startDate)
       if (endDate) statsParams.set('end_date', endDate)
@@ -213,7 +217,7 @@ function LeadsContent() {
 
   useEffect(() => {
     fetchLeads(false)
-  }, [selectedStage, selectedQuality, startDate, endDate, leadTypeFilter])
+  }, [selectedStage, selectedQuality, selectedState, startDate, endDate, leadTypeFilter])
 
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -484,6 +488,21 @@ function LeadsContent() {
                   className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
                   title="End Date"
                 />
+              </div>
+
+              {/* State Filter */}
+              <div className="flex items-center gap-1.5 bg-gray-50/50 dark:bg-gray-950/50 border border-gray-200/60 dark:border-gray-800/60 px-4 py-2 rounded-xl w-1/2 md:w-auto shrink-0 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all">
+                <MapPin className="w-4 h-4 text-emerald-500" />
+                <select
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer w-full"
+                >
+                  <option value="">All States</option>
+                  {INDIAN_STATES.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               </div>
 
               <button
@@ -900,13 +919,16 @@ function LeadsContent() {
                         </div>
                         <div>
                           <label className="text-xs text-gray-500 block mb-1">Geographic State</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Maharashtra, Delhi"
+                          <select
                             value={editState}
                             onChange={(e) => setEditState(e.target.value)}
-                            className="w-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 rounded-lg text-sm focus:outline-none"
-                          />
+                            className="w-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 rounded-lg text-sm focus:outline-none font-semibold text-gray-900 dark:text-white"
+                          >
+                            <option value="">-- Select State --</option>
+                            {INDIAN_STATES.map(s => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
                         </div>
                       </>
                     )}
