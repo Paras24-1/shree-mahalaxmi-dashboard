@@ -36,16 +36,36 @@ export async function GET(req: NextRequest) {
     if (stage)  query = query.eq('stage', stage)
     if (unread) query = query.gt('unread_count', 0)
 
-    const leadsQuery = supabaseAdmin
-      .from('leads')
-      .select('id, conversation_id, phone_number, name, lead_type, stage, lead_quality, lead_score, lead_temperature, metadata')
-      .eq('org_id', orgId)
+    // Fetch all conversations with pagination to avoid 1000 row cap
+    let allConvs: any[] = []
+    let fromConv = 0
+    while (true) {
+      const { data, error } = await query.range(fromConv, fromConv + 999)
+      if (error) throw error
+      if (!data || data.length === 0) break
+      allConvs.push(...data)
+      if (data.length < 1000) break
+      fromConv += 1000
+    }
 
-    const [convRes, leadsRes] = await Promise.all([query, leadsQuery])
-    if (convRes.error) throw convRes.error
+    // Fetch all leads for this org with valid columns to ensure lead matching
+    let allLeads: any[] = []
+    let fromLead = 0
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from('leads')
+        .select('id, conversation_id, phone_number, name, customer_name, lead_temperature, metadata')
+        .eq('org_id', orgId)
+        .range(fromLead, fromLead + 999)
+      if (error) break
+      if (!data || data.length === 0) break
+      allLeads.push(...data)
+      if (data.length < 1000) break
+      fromLead += 1000
+    }
 
-    const data = convRes.data || []
-    const leadsData = leadsRes.data || []
+    const data = allConvs
+    const leadsData = allLeads
 
     const leadsByConvId = new Map<string, any>()
     const leadsByPhone = new Map<string, any>()

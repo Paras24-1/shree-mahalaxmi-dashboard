@@ -267,17 +267,45 @@ export async function syncOsmoPhonebooks(orgId: string) {
       pbMap[key] = found
     }
 
-    // 2. Fetch all conversations and leads for this org
-    const [{ data: conversations }, { data: leads }] = await Promise.all([
-      supabaseAdmin
+    // 2. Fetch all conversations and leads for this org with pagination
+    let conversations: any[] = []
+    let fromConv = 0
+    while (true) {
+      const { data, error } = await supabaseAdmin
         .from('conversations')
-        .select('*, lead:leads(*)')
-        .eq('org_id', orgId),
-      supabaseAdmin
+        .select('id, phone_number, name, stage, last_message, notes')
+        .eq('org_id', orgId)
+        .range(fromConv, fromConv + 999)
+      if (error) break
+      if (!data || data.length === 0) break
+      conversations.push(...data)
+      if (data.length < 1000) break
+      fromConv += 1000
+    }
+
+    let leads: any[] = []
+    let fromLead = 0
+    while (true) {
+      const { data, error } = await supabaseAdmin
         .from('leads')
         .select('*')
         .eq('org_id', orgId)
-    ]);
+        .range(fromLead, fromLead + 999)
+      if (error) break
+      if (!data || data.length === 0) break
+      leads.push(...data)
+      if (data.length < 1000) break
+      fromLead += 1000
+    }
+
+    // Map leads by conversation id and phone
+    const leadsByConvId = new Map<string, any>()
+    const leadsByPhone = new Map<string, any>()
+    leads.forEach(l => {
+      if (l.conversation_id) leadsByConvId.set(l.conversation_id, l)
+      const p = (l.phone_number || '').replace(/\D/g, '').slice(-10)
+      if (p) leadsByPhone.set(p, l)
+    })
 
     // Group contacts by category
     const categorizedContacts: Record<OsmoCategoryKey, Map<string, any>> = {
@@ -292,12 +320,13 @@ export async function syncOsmoPhonebooks(orgId: string) {
       const p = cleanPhone(c.phone_number)
       if (p.length < 10) return
 
-      const category = classifyOsmoContact(c)
-      const leadObj = Array.isArray(c.lead) ? c.lead[0] : c.lead
+      const rawPhone = (c.phone_number || '').replace(/\D/g, '').slice(-10)
+      const leadObj = (c.id ? leadsByConvId.get(c.id) : null) || (rawPhone ? leadsByPhone.get(rawPhone) : null)
+      const category = classifyOsmoContact({ ...c, lead: leadObj })
       const meta = typeof c.metadata === 'string' ? (() => { try { return JSON.parse(c.metadata) } catch { return {} } })() : (c.metadata || {})
       const leadMeta = typeof leadObj?.metadata === 'string' ? (() => { try { return JSON.parse(leadObj.metadata) } catch { return {} } })() : (leadObj?.metadata || {})
 
-      const name = c.name || leadObj?.name || meta.name || leadMeta.name || leadMeta.contact_person || `Contact ${p.slice(-4)}`
+      const name = c.name || leadObj?.name || leadObj?.customer_name || meta.name || leadMeta.name || leadMeta.contact_person || `Contact ${p.slice(-4)}`
       const stage = c.stage || leadObj?.stage || 'new'
       const quality = leadObj?.lead_quality || leadObj?.lead_temperature || meta.lead_quality || 'cold'
       const score = leadObj?.lead_score || meta.lead_score || 0
