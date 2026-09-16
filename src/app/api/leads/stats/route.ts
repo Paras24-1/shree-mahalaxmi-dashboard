@@ -84,7 +84,10 @@ export async function GET(req: NextRequest) {
       osmo_dealer: 0,
       dealer: 0,
       customer: 0,
-      unfiltered: 0
+      unfiltered: 0,
+      hot: 0,
+      warm: 0,
+      followups: 0
     }
 
     allLeads.forEach(l => {
@@ -106,6 +109,7 @@ export async function GET(req: NextRequest) {
       }
 
       const leadStage = matchedConv?.stage || parsedMeta.state || parsedMeta.stage || 'new'
+      if (leadStage === 'followup' || !!l.followup_date) stats.followups++
       if (stage && leadStage !== stage) return
 
       const score = Number(parsedMeta.lead_score ?? 0)
@@ -113,6 +117,9 @@ export async function GET(req: NextRequest) {
       if (score >= 70) q = 'hot'
       else if (score >= 40) q = 'warm'
       else if (score > 0) q = 'cold'
+
+      if (q === 'hot') stats.hot++
+      if (q === 'warm') stats.warm++
       if (quality && q !== quality.toLowerCase()) return
 
       const combined = {
@@ -138,5 +145,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error }, { status: 500 })
   }
 }
+
 
 

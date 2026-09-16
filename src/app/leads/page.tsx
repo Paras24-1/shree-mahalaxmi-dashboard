@@ -117,7 +117,7 @@ function LeadsContent() {
   const [loadingMore, setLoadingMore] = useState(false)
 
   // Stats
-  const [stats, setStats] = useState({ total: 0, unfiltered: 0, osmo_dealer: 0, dealer: 0, customer: 0 })
+  const [stats, setStats] = useState({ total: 0, unfiltered: 0, osmo_dealer: 0, dealer: 0, customer: 0, hot: 0, warm: 0, followups: 0 })
   
   // Filters
   const [search, setSearch] = useState('')
@@ -171,18 +171,20 @@ function LeadsContent() {
       const token = session?.access_token || ''
       const headers = { 'Authorization': `Bearer ${token}` }
 
-      const params = new URLSearchParams()
-      if (selectedStage) params.set('stage', selectedStage)
-      if (selectedQuality) params.set('quality', selectedQuality)
-      if (search) params.set('search', search)
-      if (startDate) params.set('start_date', startDate)
-      if (endDate) params.set('end_date', endDate)
-      if (leadTypeFilter !== 'all') params.set('lead_type', leadTypeFilter)
+      const statsParams = new URLSearchParams()
+      if (selectedStage) statsParams.set('stage', selectedStage)
+      if (selectedQuality) statsParams.set('quality', selectedQuality)
+      if (search) statsParams.set('search', search)
+      if (startDate) statsParams.set('start_date', startDate)
+      if (endDate) statsParams.set('end_date', endDate)
 
       if (!loadMore) {
-        // Fetch stats only on fresh load/filter change
-        fetchStats(headers, params)
+        // Fetch stats across all categories for tab counts & metrics
+        fetchStats(headers, statsParams)
       }
+
+      const params = new URLSearchParams(statsParams)
+      if (leadTypeFilter !== 'all') params.set('lead_type', leadTypeFilter)
 
       const currentPage = loadMore ? page + 1 : 1
       params.set('page', currentPage.toString())
@@ -372,12 +374,11 @@ function LeadsContent() {
     document.body.removeChild(link)
   }
 
-  // Use stats from server for accurate total count
+  // Use stats from server for accurate metrics across all leads
   const totalLeads = stats.total
-  // Hot/Warm currently only calculated on the current page to save DB queries
-  const hotLeads = leads.filter(l => (l.lead_quality || '').toLowerCase() === 'hot' || (l.lead_temperature || '').toLowerCase() === 'hot').length
-  const warmLeads = leads.filter(l => (l.lead_quality || '').toLowerCase() === 'warm' || (l.lead_temperature || '').toLowerCase() === 'warm').length
-  const followupLeads = leads.filter(l => l.stage === 'followup' || !!l.followup_date).length
+  const hotLeads = stats.hot ?? 0
+  const warmLeads = stats.warm ?? 0
+  const followupLeads = stats.followups ?? 0
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 overflow-hidden text-gray-900 dark:text-gray-100">
