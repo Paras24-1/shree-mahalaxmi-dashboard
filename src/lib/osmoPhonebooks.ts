@@ -332,6 +332,7 @@ export async function syncOsmoPhonebooks(orgId: string) {
       const score = leadObj?.lead_score || meta.lead_score || 0
       const city = leadMeta.city || meta.city || ''
       const machineInterest = leadMeta.machine_interest || meta.machine_interest || ''
+      const has_been_bulk_messaged = leadMeta.has_been_bulk_messaged || meta.has_been_bulk_messaged || false;
 
       categorizedContacts[category].set(p, {
         phone: p,
@@ -344,7 +345,8 @@ export async function syncOsmoPhonebooks(orgId: string) {
           quality: String(quality).toUpperCase(),
           score: String(score),
           city,
-          machine_interest: machineInterest
+          machine_interest: machineInterest,
+          has_been_bulk_messaged: String(has_been_bulk_messaged)
         }
       })
     });
@@ -364,6 +366,7 @@ export async function syncOsmoPhonebooks(orgId: string) {
         const score = l.lead_score || meta.lead_score || 0
         const city = meta.city || ''
         const machineInterest = meta.machine_interest || ''
+        const has_been_bulk_messaged = meta.has_been_bulk_messaged || false;
 
         categorizedContacts[category].set(p, {
           phone: p,
@@ -376,7 +379,8 @@ export async function syncOsmoPhonebooks(orgId: string) {
             quality: String(quality).toUpperCase(),
             score: String(score),
             city,
-            machine_interest: machineInterest
+            machine_interest: machineInterest,
+            has_been_bulk_messaged: String(has_been_bulk_messaged)
           }
         })
       }

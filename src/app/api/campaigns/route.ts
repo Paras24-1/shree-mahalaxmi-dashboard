@@ -152,6 +152,49 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Background task to mark contacts as messaged
+    (async () => {
+      try {
+        const phoneList = uniqueContacts.map(c => c.phone)
+        if (phoneList.length === 0) return
+
+        // 1. Update phonebook_contacts
+        const { data: pbcList } = await supabaseAdmin
+          .from('phonebook_contacts')
+          .select('id, variables')
+          .in('phone', phoneList)
+        
+        if (pbcList) {
+          for (const pbc of pbcList) {
+            await supabaseAdmin.from('phonebook_contacts')
+              .update({ variables: { ...(pbc.variables || {}), has_been_bulk_messaged: 'true' } })
+              .eq('id', pbc.id)
+          }
+        }
+
+        // 2. Update leads table
+        const { data: leadsList } = await supabaseAdmin
+          .from('leads')
+          .select('id, metadata, phone_number')
+          .eq('org_id', orgId)
+
+        // Filter locally in case phone formatting differs slightly
+        const matchingLeads = (leadsList || []).filter((l: any) => {
+           const p = (l.phone_number || '').replace(/\\D/g, '').slice(-10)
+           return uniqueContacts.some(c => c.phone.endsWith(p))
+        })
+
+        for (const lead of matchingLeads) {
+          const currentMeta = typeof lead.metadata === 'string' ? JSON.parse(lead.metadata || '{}') : (lead.metadata || {})
+          await supabaseAdmin.from('leads')
+            .update({ metadata: { ...currentMeta, has_been_bulk_messaged: true } })
+            .eq('id', lead.id)
+        }
+      } catch (err) {
+        console.error('Error marking contacts as bulk messaged:', err)
+      }
+    })();
+
     return NextResponse.json({ success: true, campaign_id: campaign.id })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

@@ -242,6 +242,7 @@ function NewCampaign({ onCreated }: { onCreated: () => void }) {
   const [allContacts, setAllContacts]           = useState<Contact[]>([])
   const [columns, setColumns]                   = useState<string[]>([])
   const [filters, setFilters]                   = useState<FilterItem[]>([])
+  const [excludeMessaged, setExcludeMessaged]   = useState(false)
   const [filteredContacts, setFiltered]         = useState<Contact[]>([])
   const [campaignName, setCampaignName]         = useState('')
   const [templateName, setTemplateName]         = useState('')
@@ -368,6 +369,11 @@ function NewCampaign({ onCreated }: { onCreated: () => void }) {
   useEffect(() => {
     if (!allContacts.length) { setFiltered([]); return }
     let result = [...allContacts]
+
+    if (excludeMessaged) {
+      result = result.filter((c) => String(c.has_been_bulk_messaged) !== 'true')
+    }
+
     for (const f of filters) {
       if (f.column && f.value) {
         result = result.filter((c) =>
@@ -376,7 +382,7 @@ function NewCampaign({ onCreated }: { onCreated: () => void }) {
       }
     }
     setFiltered(result)
-  }, [allContacts, filters])
+  }, [allContacts, filters, excludeMessaged])
 
   const parseFile = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
@@ -776,13 +782,26 @@ function NewCampaign({ onCreated }: { onCreated: () => void }) {
         {/* Step 2: Filter */}
         {step >= 2 && (
           <StepCard number={2} title="Filter Contacts" active complete={step > 2}>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-3">
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 <span className="font-semibold text-gray-900 dark:text-white">{filteredContacts.length}</span> of {allContacts.length} contacts selected
               </p>
-              <button onClick={addFilter} className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-3 py-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-600">
-                <Filter className="w-3 h-3" /> Add Filter
-              </button>
+              
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={excludeMessaged}
+                    onChange={(e) => setExcludeMessaged(e.target.checked)}
+                    className="rounded text-emerald-500 focus:ring-emerald-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
+                  />
+                  Exclude already messaged
+                </label>
+                
+                <button onClick={addFilter} className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-3 py-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
+                  <Filter className="w-3 h-3" /> Add Filter
+                </button>
+              </div>
             </div>
 
             {filters.map((f, i) => (
