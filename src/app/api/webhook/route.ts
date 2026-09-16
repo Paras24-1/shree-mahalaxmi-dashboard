@@ -329,10 +329,7 @@ export async function POST(req: NextRequest) {
     let assignedTo = existing?.assigned_to || null
 
     if (direction === 'incoming' && !assignedTo) {
-      const { data: orgInfo } = await supabaseAdmin.from('organizations').select('slug').eq('id', orgId).maybeSingle()
-      if (orgInfo?.slug !== 'osmo-ro-2') {
-        assignedTo = await getNextEmployee(orgId)
-      }
+      assignedTo = await getNextEmployee(orgId)
     }
 
     // 3. Upsert conversation with org_id

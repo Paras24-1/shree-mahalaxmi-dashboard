@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, getOrgId } from '@/lib/supabase'
 import { isOsmoOrg, syncOsmoPhonebooks } from '@/lib/osmoPhonebooks'
-import { handlePaanifilterStateAssignment } from '@/lib/paanifilter'
 
 export async function GET(req: NextRequest) {
   try {
@@ -255,15 +254,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // Check if state is present for Paanifilter assignment
-    const extractedState = updates.state || mergedMeta.state || body.state
-    if (extractedState && targetConvId) {
-      // Check org slug if it's paanifilter
-      const { data: orgData } = await supabaseAdmin.from('organizations').select('slug').eq('id', orgId).maybeSingle()
-      if (orgData?.slug === 'osmo-ro-2') {
-        handlePaanifilterStateAssignment(orgId, targetConvId, extractedState).catch(console.error)
-      }
-    }
+    // State-based assignment logic removed as per user request
     // For Osmo RO tenant, trigger auto phonebook sync in background
     isOsmoOrg(orgId).then((isOsmo) => {
       if (isOsmo) syncOsmoPhonebooks(orgId).catch(console.error)
