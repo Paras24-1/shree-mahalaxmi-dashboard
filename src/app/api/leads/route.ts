@@ -258,7 +258,8 @@ export async function PATCH(req: NextRequest) {
           .update({
             ...(updates.name  ? { name: updates.name }   : {}),
             ...(updates.stage ? { stage: updates.stage } : {}),
-            ...(convMetaUpdate ? { metadata: convMetaUpdate } : {})
+            ...(convMetaUpdate ? { metadata: convMetaUpdate } : {}),
+            ...(updates.lead_type ? { lead_type: updates.lead_type } : {})
           })
           .eq('id', targetConvId)
           .eq('org_id', orgId)

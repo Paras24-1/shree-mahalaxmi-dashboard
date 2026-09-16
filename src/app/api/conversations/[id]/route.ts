@@ -192,6 +192,7 @@ export async function PATCH(
         Lead_Type: targetLeadType
       }
       filteredBody.metadata = convMeta
+      filteredBody.lead_type = targetLeadType
     }
 
     const { error } = await supabaseAdmin
