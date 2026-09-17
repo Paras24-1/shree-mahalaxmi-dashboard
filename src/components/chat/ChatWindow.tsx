@@ -115,14 +115,24 @@ export default function ChatWindow({ conversation, onAIToggle }: Props) {
     }
 
     try {
+      window.dispatchEvent(new CustomEvent('update-conversation', { detail: { ...conversation, lead_type: newCategory, category: newCategory } }))
+
       const { data: { session } } = await supabase.auth.getSession()
+      const headers = { 
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+      }
+
       fetch(`/api/conversations/${conversation.id}`, {
         method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
-        },
+        headers,
         body: JSON.stringify({ lead_type: newCategory })
+      }).catch(console.error)
+
+      fetch(`/api/leads`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ conversation_id: conversation.id, phone_number: conversation.phone_number, lead_type: newCategory })
       }).catch(console.error)
     } catch (err) {
       console.error('Failed to change category:', err)

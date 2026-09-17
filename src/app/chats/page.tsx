@@ -54,9 +54,30 @@ function ChatsPageContent() {
     }
   }, [user, loading, router])
 
+  useEffect(() => {
+    const handleUpdate = (e: any) => {
+      const updated = e.detail
+      if (!updated || !updated.id) return
+      setSelected(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev))
+    }
+    window.addEventListener('update-conversation', handleUpdate)
+    return () => window.removeEventListener('update-conversation', handleUpdate)
+  }, [])
+
   const handleSelect = useCallback(async (conv: Conversation) => {
-    setSelected(conv)
+    conv.unread_count = 0
+    setSelected({ ...conv, unread_count: 0 })
     setMobileView('chat')
+    window.dispatchEvent(new CustomEvent('update-conversation', { detail: { ...conv, unread_count: 0 } }))
+
+    // Clear unread in DB immediately
+    supabase.from('conversations').update({ unread_count: 0 }).eq('id', conv.id).then()
+    fetch(`/api/conversations/${conv.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unread_count: 0 })
+    }).catch(() => {})
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`/api/leads?conversation_id=${conv.id}`, {

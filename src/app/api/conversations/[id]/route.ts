@@ -99,8 +99,8 @@ export async function PATCH(
 
     // Only allow updating safe direct DB columns on conversations table
     const directDbColumns = isStaffEmployee 
-      ? ['stage', 'notes', 'is_blocked'] 
-      : ['stage', 'notes', 'assigned_to', 'assignment_status', 'is_blocked']
+      ? ['stage', 'notes', 'is_blocked', 'unread_count'] 
+      : ['stage', 'notes', 'assigned_to', 'assignment_status', 'is_blocked', 'unread_count']
     
     const filteredBody: Record<string, any> = {}
     for (const key of directDbColumns) {

@@ -67,9 +67,20 @@ export default function ConversationList({ selectedId, onSelect, onDelete }: Pro
   const [deleting, setDeleting] = useState(false)
   const [showAddLead, setShowAddLead] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
-  // Local override map: convId -> category. Used for instant UI updates after category assignment.
-  // This takes priority over the DB-derived classification until a full refetch happens.
   const [localCategoryOverrides, setLocalCategoryOverrides] = useState<Record<string, OsmoLeadCategory>>({})
+
+  useEffect(() => {
+    const handleUpdate = (e: any) => {
+      const updated = e.detail
+      if (!updated || !updated.id) return
+      const newCat = updated.lead_type || updated.category || (updated.metadata && typeof updated.metadata === 'object' ? (updated.metadata.lead_type || updated.metadata.category) : null)
+      if (newCat) {
+        setLocalCategoryOverrides(prev => ({ ...prev, [updated.id]: newCat }))
+      }
+    }
+    window.addEventListener('update-conversation', handleUpdate)
+    return () => window.removeEventListener('update-conversation', handleUpdate)
+  }, [])
   const { profile, org } = useOrg()
   const isOsmoRo = 
     profile?.email?.toLowerCase() === 'paanifilter9@gmail.com' ||
@@ -429,25 +440,34 @@ function ConversationItem({
 
     // 1. Immediately update local override so UI reflects change right away
     onCategoryChange(conv.id, newCat)
+    conv.lead_type = newCat
+    window.dispatchEvent(new CustomEvent('update-conversation', { detail: { ...conv, lead_type: newCat, category: newCat } }))
 
     // 2. Await the actual API call so we know if it succeeded
     try {
       const { data: { session } } = await supabase.auth.getSession()
+      const headers = { 
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+      }
+      
       const res = await fetch(`/api/conversations/${conv.id}`, {
         method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
-        },
+        headers,
         body: JSON.stringify({ lead_type: newCat })
       })
+
+      fetch(`/api/leads`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ conversation_id: conv.id, phone_number: conv.phone_number, lead_type: newCat })
+      }).catch(console.error)
+
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}))
         console.error('Category save failed:', res.status, errBody)
-        // Revert the override if API failed
         onCategoryChange(conv.id, classifyLeadType(conv))
       } else {
-        // 3. After DB confirmed, do a background refetch so data is fresh
         setTimeout(() => onAssignmentChange(), 1500)
       }
     } catch (err) {

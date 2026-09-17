@@ -255,13 +255,14 @@ function LeadsContent() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token || ''
+      const headers = { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
       
       fetch('/api/leads', {
         method: 'PATCH',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({
           id: lead.id,
           conversation_id: lead.conversation_id,
@@ -269,6 +270,15 @@ function LeadsContent() {
           lead_type: newCategory
         })
       }).catch(console.error)
+
+      if (lead.conversation_id) {
+        fetch(`/api/conversations/${lead.conversation_id}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ lead_type: newCategory })
+        }).catch(console.error)
+        window.dispatchEvent(new CustomEvent('update-conversation', { detail: { id: lead.conversation_id, lead_type: newCategory, category: newCategory } }))
+      }
     } catch (err) {
       console.error('Failed to change lead category:', err)
     }
