@@ -70,21 +70,22 @@ function ChatsPageContent() {
     setMobileView('chat')
     window.dispatchEvent(new CustomEvent('update-conversation', { detail: { ...conv, unread_count: 0 } }))
 
-    // Clear unread in DB immediately
-    supabase.from('conversations').update({ unread_count: 0 }).eq('id', conv.id).then()
-    fetch(`/api/conversations/${conv.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ unread_count: 0 })
-    }).catch(() => {})
-
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`/api/leads?conversation_id=${conv.id}`, {
-        headers: session?.access_token
-          ? { 'Authorization': `Bearer ${session.access_token}` }
-          : {}
-      })
+      const token = session?.access_token || ''
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+
+      // Clear unread in DB immediately via API
+      fetch(`/api/conversations/${conv.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ unread_count: 0 })
+      }).catch(() => {})
+
+      const res = await fetch(`/api/leads?conversation_id=${conv.id}`, { headers })
       if (res.ok) {
         const data = await res.json()
         setLead(data && data.id ? data : null)

@@ -143,15 +143,12 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const convId = conversation?.id || lead?.conversation_id
-      const token = session?.access_token
+      const token = session?.access_token || ''
 
-      if (!token) {
-        console.error('[Category] No auth token')
-        setSavingCategory(false)
-        return
+      const headers: Record<string, string> = { 
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       }
-
-      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
 
       // Primary: save to leads table
       const leadsRes = await fetch(`/api/leads`, {
