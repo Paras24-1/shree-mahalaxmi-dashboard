@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     // 1. Fetch leads whose 6-hour automated follow-up is due
     const { data: dueLeads, error: leadsError } = await supabaseAdmin
       .from('leads')
-      .select('id, org_id, phone_number, name, stage, lead_temperature, conversation_id, followup_notes')
+      .select('id, org_id, phone_number, name, lead_temperature, conversation_id, followup_notes, metadata')
       .not('followup_date', 'is', null)
       .lte('followup_date', nowIso)
       .eq('followup_notified', false)
@@ -84,36 +84,28 @@ export async function GET(req: NextRequest) {
 
     if (dueLeads && dueLeads.length > 0) {
       for (const lead of dueLeads) {
-        // Skip/cancel follow-up if lead is suppressed or in a qualified/completed stage
-        const isQualified = ['confirmed', 'booking', 'completed', 'hot_customer', 'not_interested'].includes(lead.stage || '')
-        if (lead.lead_temperature === 'SUPPRESSED' || isQualified) {
-          await supabaseAdmin.from('leads').update({
-            followup_notified: true,
-            followup_notes: `[Automated Follow-up Skipped: Stage is ${lead.stage || 'Suppressed'}]`
-          }).eq('id', lead.id)
-          continue
-        }
-
-        // Fetch conversation to check human takeover status
+        // Fetch conversation to check stage and human takeover status
         let convId = lead.conversation_id
         let takeover = false
         let providerPhoneId = ''
+        let convStage = ''
 
         if (convId) {
           const { data: conv } = await supabaseAdmin
             .from('conversations')
-            .select('id, takeover, provider_phone_id')
+            .select('id, takeover, provider_phone_id, stage')
             .eq('id', convId)
             .maybeSingle()
           
           if (conv) {
             takeover = !!conv.takeover
             providerPhoneId = conv.provider_phone_id || ''
+            convStage = conv.stage || ''
           }
         } else {
           const { data: conv } = await supabaseAdmin
             .from('conversations')
-            .select('id, takeover, provider_phone_id')
+            .select('id, takeover, provider_phone_id, stage')
             .eq('phone_number', lead.phone_number)
             .eq('org_id', lead.org_id)
             .maybeSingle()
@@ -122,7 +114,19 @@ export async function GET(req: NextRequest) {
             convId = conv.id
             takeover = !!conv.takeover
             providerPhoneId = conv.provider_phone_id || ''
+            convStage = conv.stage || ''
           }
+        }
+
+        const effectiveStage = convStage || (typeof lead.metadata === 'object' ? (lead.metadata as any)?.stage : '') || ''
+        const isQualified = ['confirmed', 'booking', 'completed', 'hot_customer', 'not_interested'].includes(effectiveStage)
+
+        if (lead.lead_temperature === 'SUPPRESSED' || isQualified) {
+          await supabaseAdmin.from('leads').update({
+            followup_notified: true,
+            followup_notes: `[Automated Follow-up Skipped: Stage is ${effectiveStage || 'Suppressed'}]`
+          }).eq('id', lead.id)
+          continue
         }
 
         if (takeover) {
