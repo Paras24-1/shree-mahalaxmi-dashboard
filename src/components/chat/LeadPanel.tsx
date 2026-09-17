@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Conversation, Lead, LeadActivity } from '@/types'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -34,49 +34,33 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
     org?.name?.toLowerCase().includes('osmo') ||
     org?.slug?.toLowerCase().includes('osmo')
 
-  const [leadCategory, setLeadCategory] = useState<string>('unfiltered')
   const [savingCategory, setSavingCategory] = useState(false)
   const [leadState, setLeadState] = useState<string>('')
   const [savingState, setSavingState] = useState(false)
 
-  // This ref prevents the useEffect below from overwriting a manually-set category
-  // right after the user clicks. Without this, dispatching 'update-conversation' causes
-  // conversation.metadata to change, which re-triggers the useEffect which calls
-  // classifyOsmoContact again and resets the display back to 'unfiltered'.
-  const manualCategoryRef = useRef<string | null>(null)
+  // pendingCategory holds the user's manual selection until they switch conversations.
+  // We derive the displayed category from this if set, otherwise from DB classification.
+  // This means no useEffect can ever reset a manual choice.
+  const [pendingCategory, setPendingCategory] = useState<string | null>(null)
+  const leadCategory = pendingCategory ?? classifyOsmoContact(conversation || lead)
 
+  // When conversation/lead ID changes (user switches chat), clear the pending category
+  // so the new conversation shows its correct DB-stored category
   useEffect(() => {
-    // When switching to a different conversation, clear the manual override
-    manualCategoryRef.current = null
-    if (conversation || lead) {
-      setLeadCategory(classifyOsmoContact(conversation || lead))
-      const meta = (lead || conversation)?.metadata;
-      let stateVal = '';
-      if (typeof meta === 'string') {
-        try { stateVal = JSON.parse(meta).state || '' } catch(e) {}
-      } else if (meta && typeof meta === 'object') {
-        stateVal = (meta as any).state || '';
-      }
-      setLeadState(stateVal);
-    }
+    setPendingCategory(null)
   }, [conversation?.id, lead?.id])
 
+  // Sync leadState from metadata when conversation/lead changes
   useEffect(() => {
-    if (conversation || lead) {
-      // If the user just manually set a category, don't override it from the effect
-      if (manualCategoryRef.current !== null) return
-      setLeadCategory(classifyOsmoContact(conversation || lead))
-      const meta = (lead || conversation)?.metadata;
-      let stateVal = '';
-      if (typeof meta === 'string') {
-        try { stateVal = JSON.parse(meta).state || '' } catch(e) {}
-      } else if (meta && typeof meta === 'object') {
-        stateVal = (meta as any).state || '';
-      }
-      setLeadState(stateVal);
+    const meta = (lead || conversation)?.metadata
+    let stateVal = ''
+    if (typeof meta === 'string') {
+      try { stateVal = JSON.parse(meta).state || '' } catch(e) {}
+    } else if (meta && typeof meta === 'object') {
+      stateVal = (meta as any).state || ''
     }
-  }, [(conversation as any)?.metadata, conversation?.lead_type, lead?.metadata, lead?.lead_type])
-
+    setLeadState(stateVal)
+  }, [conversation?.id, lead?.id, (conversation as any)?.metadata, lead?.metadata])
 
   const handleStateSave = async (newState: string) => {
     if (!conversation && !lead) return
@@ -130,11 +114,12 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
   const handleCategoryChange = async (newCategory: string) => {
     if (!conversation && !lead) return
 
-    // Lock the ref BEFORE setting state so the useEffect can't race and reset us
-    manualCategoryRef.current = newCategory
-    setLeadCategory(newCategory)
+    // Set pending immediately - this is what the dropdown displays.
+    // No useEffect can override pendingCategory, so it stays until user switches conversations.
+    setPendingCategory(newCategory)
     setSavingCategory(true)
 
+    // Also update the conversation object so the list sidebar reflects the change
     if (conversation) {
       conversation.lead_type = newCategory
       if (conversation.metadata && typeof conversation.metadata === 'object') {
@@ -151,34 +136,27 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
       const currentMeta = typeof lead.metadata === 'string' ? JSON.parse(lead.metadata || '{}') : (lead.metadata || {})
       onLeadUpdate({
         lead_type: newCategory,
-        metadata: {
-          ...currentMeta,
-          lead_type: newCategory,
-          category: newCategory
-        }
+        metadata: { ...currentMeta, lead_type: newCategory, category: newCategory }
       })
     }
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const convId = conversation?.id || lead?.conversation_id
-      const token = session?.access_token || ''
+      const token = session?.access_token
 
       if (!token) {
-        console.error('[Category] No auth token - cannot save category')
+        console.error('[Category] No auth token')
         setSavingCategory(false)
         return
       }
 
-      const authHeader: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
 
-      // Save to leads table (primary source of truth for category)
+      // Primary: save to leads table
       const leadsRes = await fetch(`/api/leads`, {
         method: 'PATCH',
-        headers: authHeader,
+        headers,
         body: JSON.stringify({
           id: lead?.id,
           conversation_id: convId,
@@ -186,33 +164,23 @@ export default function LeadPanel({ conversation, lead, onLeadUpdate }: {
           lead_type: newCategory
         })
       })
-
       if (!leadsRes.ok) {
-        const errBody = await leadsRes.json().catch(() => ({}))
-        console.error('[Category] leads PATCH failed:', leadsRes.status, errBody)
+        const err = await leadsRes.json().catch(() => ({}))
+        console.error('[Category] leads PATCH failed:', leadsRes.status, err)
       } else {
-        console.log('[Category] ✅ Saved to leads table:', newCategory)
+        console.log('[Category] ✅ Saved:', newCategory)
       }
 
-      // Also save to conversations route (updates leads table again via conversation linkage)
+      // Secondary: also call conversation route (links lead to conversation if needed)
       if (convId) {
-        const convRes = await fetch(`/api/conversations/${convId}`, {
+        await fetch(`/api/conversations/${convId}`, {
           method: 'PATCH',
-          headers: authHeader,
+          headers,
           body: JSON.stringify({ lead_type: newCategory })
-        })
-        if (!convRes.ok) {
-          const errBody = await convRes.json().catch(() => ({}))
-          console.error('[Category] conversations PATCH failed:', convRes.status, errBody)
-        } else {
-          console.log('[Category] ✅ Saved via conversations route:', newCategory)
-        }
+        }).catch(console.error)
       }
-
-      // Ref stays set so the category display stays correct even after subsequent
-      // conversation.metadata updates. It will be cleared when a new conversation is selected.
     } catch (err) {
-      console.error('[Category] Failed to change category:', err)
+      console.error('[Category] error:', err)
     } finally {
       setSavingCategory(false)
     }
