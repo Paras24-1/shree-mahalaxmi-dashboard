@@ -93,8 +93,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
-    if (isStaffEmployee && conv.assigned_to !== profile.userId) {
-      return NextResponse.json({ error: 'Forbidden: You can only update conversations assigned to you' }, { status: 403 })
+    // Only restrict reassigning assigned_to to other team members for staff employees
+    if (isStaffEmployee && body.assigned_to !== undefined && body.assigned_to !== profile.userId) {
+      return NextResponse.json({ error: 'Forbidden: Only admins can reassign conversations to other team members' }, { status: 403 })
     }
 
     // Only allow updating safe direct DB columns on conversations table
