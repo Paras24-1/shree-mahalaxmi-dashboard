@@ -61,6 +61,7 @@ export default function AnalyticsPage() {
 }
 
 function AnalyticsContent() {
+  const [mounted, setMounted] = useState(false)
   const [allConversations, setAllConversations] = useState<any[]>([])
   const [allEmployees, setAllEmployees] = useState<any[]>([])
   const [allAssignments, setAllAssignments] = useState<any[]>([])
@@ -70,6 +71,10 @@ function AnalyticsContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Call Analytics states
   const [callAnalyticsCache, setCallAnalyticsCache] = useState<Record<string, any>>({})
@@ -747,32 +752,34 @@ function AnalyticsContent() {
                 {(activeCallStats.notPicked || 0) > 0 ? (
                   <div className="flex flex-col items-center justify-center">
                     <div className="w-full h-[180px] relative flex items-center justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={missedBreakdownData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={45}
-                            outerRadius={65}
-                            paddingAngle={4}
-                            dataKey="value"
-                          >
-                            {missedBreakdownData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={MISSED_COLORS[index]} />
-                            ))}
-                          </Pie>
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: '#1f2937', 
-                              border: '1px solid #374151',
-                              borderRadius: '8px',
-                              fontSize: '11px',
-                              color: '#fff'
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      {mounted && (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={missedBreakdownData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={45}
+                              outerRadius={65}
+                              paddingAngle={4}
+                              dataKey="value"
+                            >
+                              {missedBreakdownData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={MISSED_COLORS[index]} />
+                              ))}
+                            </Pie>
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: '#1f2937', 
+                                border: '1px solid #374151',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                color: '#fff'
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                         <Phone className="w-5 h-5 text-red-500 rotate-45" />
                         <span className="text-xs font-bold text-gray-550 mt-0.5">{activeCallStats.notPicked || 0} Total</span>
@@ -825,26 +832,28 @@ function AnalyticsContent() {
                 Comparing agent workload, active status, and completions
               </p>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-800" />
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} />
-                <YAxis stroke="#9ca3af" fontSize={11} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1f2937', 
-                    border: '1px solid #374151',
-                    borderRadius: '12px',
-                    fontSize: '11px',
-                    color: '#fff'
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Bar dataKey="assigned" fill="#6366f1" name="Total Assigned" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="active" fill="#3b82f6" name="Active" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="completed" fill="#10b981" name="Completed" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {mounted && (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-800" />
+                  <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} />
+                  <YAxis stroke="#9ca3af" fontSize={11} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1f2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      color: '#fff'
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  <Bar dataKey="assigned" fill="#6366f1" name="Total Assigned" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="active" fill="#3b82f6" name="Active" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" fill="#10b981" name="Completed" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           {/* Pie Chart */}
@@ -864,26 +873,28 @@ function AnalyticsContent() {
               <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-0.5">Total Chats</span>
             </div>
 
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  outerRadius={100}
-                  innerRadius={70}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            {mounted && (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => `${name}: ${value}`}
+                    outerRadius={100}
+                    innerRadius={70}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 

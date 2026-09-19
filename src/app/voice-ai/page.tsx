@@ -1,6 +1,8 @@
 'use client'
 
-import AnalyticsPage from '@/app/analytics/page'
+import dynamic from 'next/dynamic'
+
+const AnalyticsPage = dynamic(() => import('@/app/analytics/page'), { ssr: false })
 
 export default function VoiceAIPage() {
   return <AnalyticsPage />
